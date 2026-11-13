@@ -1,0 +1,177 @@
+From 2d7db11ff32184a0a2b8cc9e43b34ce1618f3a99 Mon Sep 17 00:00:00 2001
+From: pixel-builder <builder@localhost>
+Date: Fri, 13 Nov 2026 15:18:20 +0000
+Subject: [PATCH] HACK: arm64: dts: qcom: sdm845-google-crosshatch: Add speaker
+ amps and sound card
+
+Two Cirrus CS35L36 smart amps on QUP SE12 (0x40 bottom/Right, 0x41 top/
+Left) fed over QUATERNARY TDM, as in the stock C1 dtbo (fragment@96 and
+the quat-tdm sound card). The sdm845 machine driver already handles
+QUAT TDM with Left/Right prefixed CS35L36 codecs (TDM slots, 6.144 MHz
+SCLK sysclk).
+
+Not upstream; values taken from the stock C1 DVT1.1 dtbo overlay.
+---
+ .../dts/qcom/sdm845-google-crosshatch.dts     | 142 ++++++++++++++++++
+ 1 file changed, 142 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts b/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
+index f47f5ba63..c83c7cae5 100644
+--- a/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
++++ b/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
+@@ -4,6 +4,8 @@
+ 
+ #include <dt-bindings/gpio/gpio.h>
+ #include <dt-bindings/interrupt-controller/irq.h>
++#include <dt-bindings/sound/qcom,q6afe.h>
++#include <dt-bindings/sound/qcom,q6asm.h>
+ #include "sdm845-google-common.dtsi"
+ 
+ / {
+@@ -157,3 +159,143 @@ fg_int_default: fg-int-default-state {
+ 		bias-pull-up;
+ 	};
+ };
++
++&i2c12 {
++	/* Stock dtbo fragment@96: 2x CS35L36 smart amps on QUAT TDM, VA = pm8998_s4 */
++	speaker_right: audio-codec@40 {
++		/* Bottom speaker */
++		compatible = "cirrus,cs35l36";
++		reg = <0x40>;
++		#sound-dai-cells = <0>;
++		sound-name-prefix = "Right";
++
++		pinctrl-0 = <&spkr_right_default>;
++		pinctrl-names = "default";
++
++		reset-gpios = <&tlmm 112 GPIO_ACTIVE_HIGH>;
++		interrupts-extended = <&tlmm 115 IRQ_TYPE_LEVEL_LOW>;
++
++		VA-supply = <&vreg_s4a_1p8>;
++		VP-supply = <&vph_pwr>;
++
++		cirrus,boost-ind-nanohenry = <1000>;
++		cirrus,boost-ctl-select = <1>;
++		cirrus,boost-ctl-millivolt = <10000>;
++		cirrus,boost-peak-milliamp = <3700>;
++		cirrus,multi-amp-mode;
++		cirrus,temp-warn-threshold = <1>;
++		cirrus,irq-drive-select = <0>;
++		cirrus,irq-gpio-select = <0>;
++	};
++
++	speaker_left: audio-codec@41 {
++		/* Top speaker (earpiece position) */
++		compatible = "cirrus,cs35l36";
++		reg = <0x41>;
++		#sound-dai-cells = <0>;
++		sound-name-prefix = "Left";
++
++		pinctrl-0 = <&spkr_left_default>;
++		pinctrl-names = "default";
++
++		reset-gpios = <&tlmm 75 GPIO_ACTIVE_HIGH>;
++		interrupts-extended = <&tlmm 40 IRQ_TYPE_LEVEL_LOW>;
++
++		VA-supply = <&vreg_s4a_1p8>;
++		VP-supply = <&vph_pwr>;
++
++		cirrus,boost-ind-nanohenry = <1000>;
++		cirrus,boost-ctl-select = <1>;
++		cirrus,boost-ctl-millivolt = <10000>;
++		cirrus,boost-peak-milliamp = <3700>;
++		cirrus,multi-amp-mode;
++		cirrus,temp-warn-threshold = <1>;
++		cirrus,irq-drive-select = <0>;
++		cirrus,irq-gpio-select = <0>;
++	};
++};
++
++&q6afedai {
++	dai@72 {
++		reg = <QUATERNARY_TDM_RX_0>;
++		/* Stock: short sync, normal sync polarity; SoC is clock master; DSP_A -> 1 bit delay */
++		qcom,tdm-sync-mode = <0>;
++		qcom,tdm-sync-src = <1>;
++		qcom,tdm-data-out = <0>;
++		qcom,tdm-invert-sync = <0>;
++		qcom,tdm-data-delay = <1>;
++		qcom,tdm-data-align = <0>;
++	};
++};
++
++&q6asmdai {
++	dai@0 {
++		reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
++	};
++};
++
++&sound {
++	compatible = "qcom,sdm845-sndcard";
++	model = "Pixel 3 XL";
++	pinctrl-0 = <&quat_mi2s_active &quat_mi2s_sd0_active &quat_mi2s_sd1_active>;
++	pinctrl-names = "default";
++
++	status = "okay";
++
++	mm1-dai-link {
++		link-name = "MultiMedia1";
++		cpu {
++			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA1>;
++		};
++	};
++
++	speaker-dai-link {
++		link-name = "Speaker Playback";
++		cpu {
++			sound-dai = <&q6afedai QUATERNARY_TDM_RX_0>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&speaker_left>, <&speaker_right>;
++		};
++	};
++};
++
++&tlmm {
++	/* Stock: amp IRQ lines are open-drain and need the pull-up (without it: level-low IRQ storm) */
++	spkr_right_default: spkr-right-default-state {
++		reset-pins {
++			pins = "gpio112";
++			function = "gpio";
++			drive-strength = <2>;
++			bias-disable;
++		};
++
++		irq-pins {
++			pins = "gpio115";
++			function = "gpio";
++			drive-strength = <2>;
++			bias-pull-up;
++		};
++	};
++
++	spkr_left_default: spkr-left-default-state {
++		reset-pins {
++			pins = "gpio75";
++			function = "gpio";
++			drive-strength = <2>;
++			bias-disable;
++		};
++
++		irq-pins {
++			pins = "gpio40";
++			function = "gpio";
++			drive-strength = <2>;
++			bias-pull-up;
++		};
++	};
++};
+-- 
+2.43.0
+

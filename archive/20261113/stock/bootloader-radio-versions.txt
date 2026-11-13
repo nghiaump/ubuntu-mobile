@@ -1,0 +1,2 @@
+bootloader-crosshatch-b1c1-0.4-7617406.img
+radio-crosshatch-g845-00194-210812-b-7635520.img

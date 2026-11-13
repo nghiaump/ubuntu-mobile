@@ -1,0 +1,22 @@
+Analyzing 12 messages in the thread
+Checking attestation on all messages, may take a moment...
+---
+  [PATCH v7 1/8] dt-bindings: arm: qcom: Add Pixel 3 and 3 XL
+  [PATCH v7 2/8] dt-bindings: panel: sw43408: adjust to reflect the DDIC and panel used
+  [PATCH v7 3/8] drm/panel: sw43408: Introduce LH546WF1-ED01 panel compatible
+  [PATCH v7 4/8] drm/panel: sw43408: Separate reset sequence into own function
+    + Reviewed-by: Neil Armstrong <neil.armstrong@linaro.org> ([31m✗[0m DKIM/linaro.org)
+  [PATCH v7 5/8] drm/panel: sw43408: Remove manual invocation of unprepare at remove
+  [PATCH v7 6/8] drm/panel: sw43408: Switch to devm_regulator_bulk_get_const
+  [PATCH v7 7/8] drm/panel: sw43408: Improve wording when reset-gpios aren't available
+  [PATCH v7 8/8] arm64: dts: qcom: Add support for Pixel 3 and Pixel 3 XL
+  ---
+  [31m✗[0m No key: openpgp/david@ixit.cz
+---
+Total patches: 8
+---
+Cover: pixel3-v7/v7_20251214_david_add_support_for_pixel_3_and_pixel_3_xl.cover
+ Link: https://lore.kernel.org/r/20251214-pixel-3-v7-0-b1c0cf6f224d@ixit.cz
+ Base: base-commit 1afd6a72e30f55f3a1699180d01d969444ad4469 not known, ignoring
+ Base: not specified
+       git am pixel3-v7/v7_20251214_david_add_support_for_pixel_3_and_pixel_3_xl.mbx

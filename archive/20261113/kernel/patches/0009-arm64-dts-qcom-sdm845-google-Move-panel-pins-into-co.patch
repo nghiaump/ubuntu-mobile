@@ -1,0 +1,76 @@
+From 6eb91a1f6862608d9d5b1eadb6fc74fef414c16f Mon Sep 17 00:00:00 2001
+From: David Heidelberg <david@ixit.cz>
+Date: Sun, 8 Nov 2026 12:32:30 +0000
+Subject: [PATCH 09/12] arm64: dts: qcom: sdm845-google: Move panel pins into
+ common
+
+Both devices share the pinctrl configuration.
+
+Reviewed-by: Petr Vorel <petr.vorel@gmail.com>
+Reviewed-by: Konrad Dybcio <konrad.dybcio@oss.qualcomm.com>
+Signed-off-by: David Heidelberg <david@ixit.cz>
+Reviewed-by: Abel Vesa <abel.vesa@oss.qualcomm.com>
+---
+ .../boot/dts/qcom/sdm845-google-blueline.dts   | 18 ------------------
+ .../boot/dts/qcom/sdm845-google-common.dtsi    | 16 ++++++++++++++++
+ 2 files changed, 16 insertions(+), 18 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/sdm845-google-blueline.dts b/arch/arm64/boot/dts/qcom/sdm845-google-blueline.dts
+index fa89be500..a000c7549 100644
+--- a/arch/arm64/boot/dts/qcom/sdm845-google-blueline.dts
++++ b/arch/arm64/boot/dts/qcom/sdm845-google-blueline.dts
+@@ -66,24 +66,6 @@ &mdss_dsi0_phy {
+ 	status = "okay";
+ };
+ 
+-&tlmm {
+-	panel_default: panel-default-state {
+-		reset-pins {
+-			pins = "gpio6";
+-			function = "gpio";
+-			drive-strength = <8>;
+-			bias-disable;
+-		};
+-
+-		te-pins {
+-			pins = "gpio12";
+-			function = "mdp_vsync";
+-			drive-strength = <2>;
+-			bias-pull-down;
+-		};
+-	};
+-};
+-
+ &wifi {
+ 	qcom,calibration-variant = "Google_blueline";
+ };
+diff --git a/arch/arm64/boot/dts/qcom/sdm845-google-common.dtsi b/arch/arm64/boot/dts/qcom/sdm845-google-common.dtsi
+index f1379857e..d54cb47cd 100644
+--- a/arch/arm64/boot/dts/qcom/sdm845-google-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/sdm845-google-common.dtsi
+@@ -478,6 +478,22 @@ &tlmm {
+ 	gpio-reserved-ranges = < 0 4>, /* SPI (Intel MNH Pixel Visual Core) */
+ 			       <81 4>; /* SPI (most likely Fingerprint Cards FPC1075) */
+ 
++	panel_default: panel-default-state {
++		reset-pins {
++			pins = "gpio6";
++			function = "gpio";
++			drive-strength = <8>;
++			bias-disable;
++		};
++
++		te-pins {
++			pins = "gpio12";
++			function = "mdp_vsync";
++			drive-strength = <2>;
++			bias-pull-down;
++		};
++	};
++
+ 	nfc_default: nfc-default-state {
+ 		enable-pins {
+ 			pins = "gpio25";
+-- 
+2.43.0
+

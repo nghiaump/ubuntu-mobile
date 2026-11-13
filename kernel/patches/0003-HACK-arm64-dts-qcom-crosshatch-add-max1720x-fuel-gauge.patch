@@ -1,0 +1,56 @@
+From 2217d97209b0dae84a67f30dcfb642b1cc60f2f8 Mon Sep 17 00:00:00 2001
+From: pixel-builder <builder@localhost>
+Date: Fri, 13 Nov 2026 14:54:26 +0000
+Subject: [PATCH] HACK: arm64: dts: qcom: sdm845-google-crosshatch: Add
+ MAX1720x fuel gauge
+
+The Pixel 3 XL measures the battery with a Maxim MAX1720x on QUP SE12
+(stock dtbo: "maxim,max1720x" @ 0x36 + 0x0b nvram, fg_irq GPIO 62
+pulled up, 3430 mAh design capacity). Describe it for the mainline
+max1720x_battery driver so userspace gets capacity/voltage/current.
+
+Not upstream; values taken from the stock C1 DVT1.1 dtbo overlay.
+---
+ .../dts/qcom/sdm845-google-crosshatch.dts     | 29 +++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts b/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
+index 5f7ea1210..f47f5ba63 100644
+--- a/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
++++ b/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
+@@ -128,3 +128,32 @@ ts-reset-hog {
+ 		line-name = "touchscreen-reset";
+ 	};
+ };
++
++&i2c12 {
++	/* Shared with the CS35L36 speaker amps (0x40/0x41, not described yet) */
++	clock-frequency = <400000>;
++
++	status = "okay";
++
++	fuel-gauge@36 {
++		/* Stock dtbo (C1 DVT1.1, fragment@62): "maxim,max1720x", reg <0x36 0x0b>,
++		 * fg_irq on GPIO 62, capacity-design 3430 mAh */
++		compatible = "maxim,max17201";
++		reg = <0x36>, <0x0b>;
++		reg-names = "m5", "nvmem";
++
++		interrupts-extended = <&tlmm 62 IRQ_TYPE_LEVEL_LOW>;
++
++		pinctrl-0 = <&fg_int_default>;
++		pinctrl-names = "default";
++	};
++};
++
++&tlmm {
++	fg_int_default: fg-int-default-state {
++		pins = "gpio62";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++};
+-- 
+2.43.0
+

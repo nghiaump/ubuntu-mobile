@@ -1,0 +1,14 @@
+# Chỉ nới ext4 cho đầy userdata. (Bản cũ có Before=ssh.socket -> vòng lặp thứ tự với basic.target:
+#  ssh.socket thuộc sockets.target < basic.target < unit thường -> systemd bỏ job ssh.socket -> SSH bị từ chối.)
+[Unit]
+Description=Pixel first boot: resize rootfs
+ConditionPathExists=!/var/lib/pixel/firstboot-done
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pixel-firstboot.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

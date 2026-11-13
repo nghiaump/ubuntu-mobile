@@ -1,0 +1,124 @@
+#!/bin/busybox sh
+# initramfs tối giản cho Pixel 3 XL (mainline):
+#  - USB gadget NCM (mạng) + ACM (serial) -> Mac SSH/telnet vào 172.16.42.1
+#  - log lên framebuffer (tty0) và /dev/kmsg
+#  - Mặc định ở lại shell debug. Chỉ switch_root khi cmdline có pixel.root=<dev>
+#    (KHÔNG dùng root=: ABL của Android có thể tự chèn root=... vào cmdline).
+#  Tham số: pixel.root=PARTLABEL=userdata  pixel.rootfstype=ext4  pixel.init=/sbin/init
+#           pixel.shell=1 (ở lại shell kể cả khi có pixel.root)
+/bin/busybox --install -s /bin
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+mkdir -p /proc /sys /dev /tmp /run /newroot
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts && mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /tmp
+mount -t tmpfs tmpfs /run
+mount -t configfs configfs /sys/kernel/config 2>/dev/null
+
+log() {
+    echo "[pixel-init] $*" > /dev/kmsg 2>/dev/null
+    [ -c /dev/tty0 ] && echo "[pixel-init] $*" > /dev/tty0 2>/dev/null
+}
+
+getarg() {  # getarg pixel.root -> giá trị
+    for a in $(cat /proc/cmdline); do
+        case "$a" in "$1="*) echo "${a#*=}"; return 0 ;; "$1") echo 1; return 0 ;; esac
+    done
+    return 1
+}
+
+# ABL thay console=tty0 bằng console=null -> tự đẩy log kernel lên màn hình (tty1)
+# (busybox dmesg không có -w -> đọc /dev/kmsg)
+[ -c /dev/tty1 ] && { dmesg -n 1; ( cat /dev/kmsg > /dev/tty1 2>&1 ) & }
+log "initramfs bắt đầu, kernel $(uname -r)"
+log "cmdline: $(cat /proc/cmdline)"
+
+setup_usb() {
+    G=/sys/kernel/config/usb_gadget/g1
+    [ -d /sys/kernel/config/usb_gadget ] || { log "!! không có configfs usb_gadget"; return 1; }
+    mkdir -p $G && cd $G || return 1
+    echo 0x1d6b > idVendor        # Linux Foundation
+    echo 0x0104 > idProduct       # Multifunction Composite Gadget
+    echo 0x0100 > bcdDevice
+    echo 0x0200 > bcdUSB
+    mkdir -p strings/0x409
+    echo "Google"                  > strings/0x409/manufacturer
+    echo "Pixel 3 XL (mainline)"   > strings/0x409/product
+    cat /proc/sys/kernel/random/boot_id 2>/dev/null | cut -c1-8 > strings/0x409/serialnumber
+    mkdir -p functions/ncm.usb0 functions/acm.usb0
+    # MAC cố định để Mac nhớ cấu hình mạng giữa các lần boot
+    echo "02:00:00:3a:00:01" > functions/ncm.usb0/host_addr
+    echo "02:00:00:3a:00:02" > functions/ncm.usb0/dev_addr
+    mkdir -p configs/c.1/strings/0x409
+    echo "NCM+ACM" > configs/c.1/strings/0x409/configuration
+    echo 500 > configs/c.1/MaxPower
+    ln -s functions/ncm.usb0 configs/c.1/
+    ln -s functions/acm.usb0 configs/c.1/
+    i=0
+    while [ -z "$(ls /sys/class/udc 2>/dev/null)" ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+    UDC=$(ls /sys/class/udc | head -n1)
+    [ -n "$UDC" ] || { log "!! không thấy UDC (dwc3 chưa lên?)"; cd /; return 1; }
+    echo "$UDC" > UDC
+    cd /
+    IF=$(cat $G/functions/ncm.usb0/ifname 2>/dev/null || echo usb0)
+    ip link set "$IF" up
+    ip addr add 172.16.42.1/24 dev "$IF"
+    cat > /tmp/udhcpd.conf <<EOF
+start 172.16.42.2
+end 172.16.42.2
+interface $IF
+max_leases 1
+lease_file /tmp/udhcpd.leases
+option subnet 255.255.255.0
+EOF
+    touch /tmp/udhcpd.leases
+    udhcpd /tmp/udhcpd.conf
+    telnetd -b 172.16.42.1:23 -l /bin/sh
+    # serial qua USB (ACM) -> trên Mac là /dev/cu.usbmodem*
+    ( while true; do setsid getty -n -l /bin/sh 115200 ttyGS0 vt100 2>/dev/null || sleep 2; done ) &
+    log "USB: UDC=$UDC iface=$IF IP 172.16.42.1 (Mac nhận 172.16.42.2), telnet 23, ACM ttyGS0"
+}
+
+setup_usb || log "!! dựng USB gadget thất bại"
+
+ROOT=$(getarg pixel.root)
+if [ -n "$ROOT" ] && ! getarg pixel.shell >/dev/null; then
+    FSTYPE=$(getarg pixel.rootfstype || echo ext4)
+    INIT=$(getarg pixel.init || echo /sbin/init)
+    log "chờ thiết bị root $ROOT ..."
+    DEV=""; i=0
+    while [ $i -lt 200 ]; do
+        DEV=$(findfs "$ROOT" 2>/dev/null) && [ -b "$DEV" ] && break
+        sleep 0.1; i=$((i+1))
+    done
+    if [ -b "$DEV" ] && mount -t "$FSTYPE" -o rw "$DEV" /newroot; then
+        if [ -x "/newroot$INIT" ] || [ -L "/newroot$INIT" ]; then
+            log "switch_root -> $DEV ($INIT)"
+            # GỠ HẲN gadget để rootfs dựng lại từ đầu (nếu chỉ tháo UDC, function NCM vẫn còn liên kết
+            # trong config -> rootfs ghi host_addr/dev_addr bị -EBUSY và usb-gadget.service hỏng)
+            killall telnetd udhcpd getty 2>/dev/null
+            G=/sys/kernel/config/usb_gadget/g1
+            if [ -d $G ]; then
+                echo "" > $G/UDC 2>/dev/null
+                rm -f $G/configs/c.1/ncm.usb0 $G/configs/c.1/acm.usb0
+                rmdir $G/configs/c.1/strings/0x409 $G/configs/c.1 2>/dev/null
+                rmdir $G/functions/ncm.usb0 $G/functions/acm.usb0 $G/strings/0x409 $G 2>/dev/null
+                [ -d $G ] && log "!! không gỡ hết được gadget g1"
+            fi
+            umount /sys/kernel/config 2>/dev/null
+            for m in /proc /sys /dev/pts /dev /tmp /run; do mount --move $m /newroot$m 2>/dev/null; done
+            exec switch_root /newroot "$INIT"
+        fi
+        log "!! không thấy $INIT trên $DEV"; umount /newroot
+    else
+        log "!! không mount được $ROOT ($DEV)"
+    fi
+fi
+
+log "ở lại shell debug. telnet 172.16.42.1 từ Mac. Về fastboot: rebootarg bootloader"
+while true; do
+    setsid sh -c 'exec sh </dev/tty1 >/dev/tty1 2>&1' 2>/dev/null || sleep 5
+done

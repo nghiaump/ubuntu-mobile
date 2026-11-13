@@ -1,0 +1,12 @@
+[Unit]
+Description=Pixel 3 XL: nạp card âm thanh + bật đường loa (QUAT TDM -> 2x CS35L36)
+After=systemd-modules-load.service systemd-udev-trigger.service rmtfs.service
+Before=sound.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/pixel-sound.sh
+
+[Install]
+WantedBy=multi-user.target

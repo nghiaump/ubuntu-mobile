@@ -1,0 +1,11 @@
+[Unit]
+Description=Nút nguồn bật/tắt màn hình mềm (backlight 0 + khoá cảm ứng + khoá GNOME)
+After=systemd-logind.service
+
+[Service]
+ExecStart=/usr/local/sbin/pixel-powerkey.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

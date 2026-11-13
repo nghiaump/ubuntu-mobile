@@ -1,0 +1,69 @@
+From 08ebef9fe6640f65865ea6efe26071f03588dada Mon Sep 17 00:00:00 2001
+From: pixel3 port <pixel3@localhost>
+Date: Fri, 13 Nov 2026 23:17:20 +0700
+Subject: [PATCH] ASoC: qcom: q6asm: reset playback queue state on re-prepare
+
+When a PCM substream is prepared again without being closed (PipeWire
+does this on every suspend/resume of a node), q6asm_dai_prepare() closes
+and reopens the DSP stream and ALSA restarts appl_ptr at 0, but
+prtd->queue_ptr, port->dsp_buf and port->hw_ptr keep their old values.
+q6asm_dai_ack() then computes a negative number of available periods and
+never queues another buffer: the stream plays one period and stalls in
+RUNNING state.
+
+Reset queue_ptr in prepare and reset the q6asm buffer index/hw pointer on
+CMD_CLOSE as well as on CMD_FLUSH.
+
+Signed-off-by: nghiaump <nghiaump@gmail.com>
+---
+ sound/soc/qcom/qdsp6/q6asm-dai.c | 7 +++++--
+ sound/soc/qcom/qdsp6/q6asm.c     | 4 +++-
+ 2 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/sound/soc/qcom/qdsp6/q6asm-dai.c b/sound/soc/qcom/qdsp6/q6asm-dai.c
+index dc5230f13..399ccbf89 100644
+--- a/sound/soc/qcom/qdsp6/q6asm-dai.c
++++ b/sound/soc/qcom/qdsp6/q6asm-dai.c
+@@ -294,10 +294,13 @@ static int q6asm_dai_prepare(struct snd_soc_component *component,
+ 			q6asm_read(prtd->audio_client, prtd->stream_id);
+ 
+ 	}
+-	if (ret < 0)
++	if (ret < 0) {
+ 		dev_info(dev, "%s: CMD Format block failed\n", __func__);
+-	else
++	} else {
++		/* appl_ptr restarts at 0 after prepare: restart the queue too */
++		prtd->queue_ptr = 0;
+ 		prtd->state = Q6ASM_STREAM_RUNNING;
++	}
+ 
+ 	return ret;
+ 
+diff --git a/sound/soc/qcom/qdsp6/q6asm.c b/sound/soc/qcom/qdsp6/q6asm.c
+index 3f9f2448e..4568e2801 100644
+--- a/sound/soc/qcom/qdsp6/q6asm.c
++++ b/sound/soc/qcom/qdsp6/q6asm.c
+@@ -1566,8 +1566,10 @@ static void q6asm_reset_buf_state(struct audio_client *ac)
+ 	guard(spinlock_irqsave)(&ac->lock);
+ 	port = &ac->port[SNDRV_PCM_STREAM_PLAYBACK];
+ 	port->dsp_buf = 0;
++	atomic_set(&port->hw_ptr, 0);
+ 	port = &ac->port[SNDRV_PCM_STREAM_CAPTURE];
+ 	port->dsp_buf = 0;
++	atomic_set(&port->hw_ptr, 0);
+ }
+ 
+ static int __q6asm_cmd(struct audio_client *ac, uint32_t stream_id, int cmd,
+@@ -1609,7 +1611,7 @@ static int __q6asm_cmd(struct audio_client *ac, uint32_t stream_id, int cmd,
+ 	if (rc < 0)
+ 		return rc;
+ 
+-	if (cmd == CMD_FLUSH)
++	if (cmd == CMD_FLUSH || cmd == CMD_CLOSE)
+ 		q6asm_reset_buf_state(ac);
+ 
+ 	return 0;
+-- 
+2.54.0 (Apple Git-157)
+

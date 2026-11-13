@@ -1,0 +1,3 @@
+# Panel AMOLED S6E3HA8: KHÔNG được tắt (GNOME tắt màn hình -> máy reset), nên giữ sáng thấp để đỡ tốn pin/lưu ảnh.
+# Độ sáng là lệnh DCS qua DSI, panel vẫn bật. systemd-backlight sẽ lưu/khôi phục giá trị người dùng đổi sau đó.
+ACTION=="add", SUBSYSTEM=="backlight", KERNEL=="ae94000.dsi.0", ATTR{brightness}="40"

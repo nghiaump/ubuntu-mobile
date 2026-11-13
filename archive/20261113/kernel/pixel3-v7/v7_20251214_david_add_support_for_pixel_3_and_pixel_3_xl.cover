@@ -1,0 +1,131 @@
+Subject: [PATCH v7 0/8] Add support for Pixel 3 and Pixel 3 XL
+From: David Heidelberg <david@ixit.cz>
+Date: Sun, 14 Dec 2025 15:51:16 +0100
+Message-Id: <20251214-pixel-3-v7-0-b1c0cf6f224d@ixit.cz>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+This adds initial device tree support for the following phones:
+
+ - Google Pixel 3 (blueline)
+ - Google Pixel 3 XL (crosshatch)
+
+Both phone boards use the same identifiers and differ only slightly
+in their connected peripherals.
+
+This is mainly focused to get the base functionality of the board and
+being able to use the upstream DTS within Linux and u-boot.
+
+Booting
+-------
+For older Pixel 3 bootloaders, bootloader-compatible board and MSM IDs are
+required for the kernel to boot, so these have been added.
+
+For recent Pixel 3 bootloaders,
+a) you want chainloaded proper bootloader (f.e. u-boot),
+b) you can also boot kernel when adding back TEXT_OFFSET
+   (partial revert of 120dc60d).
+
+This series is a beggining of cleaning up and transitioning support from
+sdm845 close to mainline tree to the mainline.
+
+Until merged, available at:
+  https://gitlab.com/sdm845/sdm845-next/-/commits/b4/pixel-3
+
+Signed-off-by: David Heidelberg <david@ixit.cz>
+---
+Changes in v7:
+- Added callibration data for both devices.
+  Sent variants to the ath10k mailing list. (Dmitry)
+- Replaced "drm/panel: sw43408: Add enable/disable and reset functions"
+  with "drm/panel: sw43408: Separate reset sequence into own function".
+- Enable cci node, as both cci_i2c0 and cci_i2c1 works (tested with
+  i2cdetect with regulator_ignore_unused).
+- Added front camera and it's eeprom placeholder.
+- Link to v6: https://lore.kernel.org/r/20251208-pixel-3-v6-0-e9e559d6f412@ixit.cz
+
+Changes in v6:
+- Disabled dispcc on Pixel 3 XL to keep framebuffer reliably working
+  after the boot. Previously I used framebuffer only in u-boot.
+- Link to v5: https://lore.kernel.org/r/20251206-pixel-3-v5-0-dc99732e7d35@ixit.cz
+
+Changes in v5:
+- Document 1 MHz frequency for i2c2 on blueline and add placeholder for
+  the touchscreen.
+- Rename vreg_l14a_1p88 regulator to vreg_l14a_1p8 as it's 1.80V.
+- Move panel _enable() function below _program(). (Dmitry)
+- Link to v4: https://lore.kernel.org/r/20251125-pixel-3-v4-0-3b706f8dcc96@ixit.cz
+
+Changes in v4:
+- Updated panel device-tree example to contain the both compatibles.
+- Put panel pins into the panel-default-state and drop the suspend state
+  as it's not yet used.
+- Also, sort the pins. (Konrad)
+- Move the framebuffer format to common, as it's UEFI standard. (Konrad)
+- Improve commit descriptions and add Fixes tag. (Dmitry)
+- Link to v3: https://lore.kernel.org/r/20251118-pixel-3-v3-0-317a2b400d8a@ixit.cz
+
+Changes in v3:
+- dropped Documentaion: prefix from 1st commit (Krzysztof)
+- Extended the compatible for panel driver.
+- Document reserved GPIOs.
+- Drop some useless statuses, sort pinctrl. (Konrad)
+- Add placeholders for the known i2c devices.
+- Link to v2: https://lore.kernel.org/r/20251030-pixel-3-v2-0-8caddbe072c9@ixit.cz
+
+Changes in v2:
+- rebased on next-20251030
+- generalize chosen to -common (Dmitry)
+- demystify rmtfs_mem qcom,vmid
+- use qcom,use-guard-pages instead of lower/upper guard block
+- merge port@1 endpoint into label mdss_dsi0_out
+- sort pinctrl
+- sorted the nodes inside root
+- put status as a last property into mdss_dsi0 block
+- rename volume-keys to gpio-keys   
+- removed LS-UART1 label
+- removed gmu block, already enabled
+- removed accidentally introduced WIP crosshatch panel support
+- removed useless panel_pmgpio_pins (Dmitry)
+- removed usb_2 as it's unused on production units (only devkit)
+- move mdss node into the -common and disable in crosshatch (Dmitry)
+- move battery node into the -commonm
+- move framebuffer into the -common (Dmitry)
+- add all firmwares (Dmitry)
+- add Wi-Fi support
+- add Bluetooth support
+- add missing gpi_dma1 node
+- renamed regulators to follow regulator-foo-bar BCP (Dmitry)
+- adapt to recent cleanup GPU's zap-shader node
+- Link to v1: https://lore.kernel.org/r/20251005-pixel-3-v1-0-ab8b85f6133f@ixit.cz
+
+---
+David Heidelberg (8):
+      dt-bindings: arm: qcom: Add Pixel 3 and 3 XL
+      dt-bindings: panel: sw43408: adjust to reflect the DDIC and panel used
+      drm/panel: sw43408: Introduce LH546WF1-ED01 panel compatible
+      drm/panel: sw43408: Separate reset sequence into own function
+      drm/panel: sw43408: Remove manual invocation of unprepare at remove
+      drm/panel: sw43408: Switch to devm_regulator_bulk_get_const
+      drm/panel: sw43408: Improve wording when reset-gpios aren't available
+      arm64: dts: qcom: Add support for Pixel 3 and Pixel 3 XL
+
+ Documentation/devicetree/bindings/arm/qcom.yaml    |   2 +
+ .../bindings/display/panel/lg,sw43408.yaml         |  13 +-
+ arch/arm64/boot/dts/qcom/Makefile                  |   2 +
+ .../arm64/boot/dts/qcom/sdm845-google-blueline.dts |  89 ++++
+ arch/arm64/boot/dts/qcom/sdm845-google-common.dtsi | 536 +++++++++++++++++++++
+ .../boot/dts/qcom/sdm845-google-crosshatch.dts     |  36 ++
+ drivers/gpu/drm/panel/panel-lg-sw43408.c           |  58 +--
+ 7 files changed, 705 insertions(+), 31 deletions(-)
+---
+base-commit: 1afd6a72e30f55f3a1699180d01d969444ad4469
+change-id: 20250419-pixel-3-511edc2a4607
+
+Best regards,
+-- 
+David Heidelberg <david@ixit.cz>
+
+
+

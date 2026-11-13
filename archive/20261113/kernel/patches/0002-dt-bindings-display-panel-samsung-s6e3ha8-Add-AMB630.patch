@@ -1,0 +1,86 @@
+From 6a6c59c0eeca6e9d55d2b2507164e0343d3261e2 Mon Sep 17 00:00:00 2001
+From: David Heidelberg <david@ixit.cz>
+Date: Sun, 8 Nov 2026 12:32:23 +0000
+Subject: [PATCH 02/12] dt-bindings: display: panel: samsung,s6e3ha8: Add
+ AMB630QY01 panel
+
+The Google Pixel 3 XL (crosshatch) uses a Samsung AMB630QY01 6.3"
+1440x2960 flexible AMOLED panel.
+
+Signed-off-by: David Heidelberg <david@ixit.cz>
+---
+ .../display/panel/samsung,s6e3ha8.yaml        | 41 +++++++++++++++----
+ 1 file changed, 34 insertions(+), 7 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/display/panel/samsung,s6e3ha8.yaml b/Documentation/devicetree/bindings/display/panel/samsung,s6e3ha8.yaml
+index ca250b1b9..dcf347fe5 100644
+--- a/Documentation/devicetree/bindings/display/panel/samsung,s6e3ha8.yaml
++++ b/Documentation/devicetree/bindings/display/panel/samsung,s6e3ha8.yaml
+@@ -12,17 +12,45 @@ description: |
+ 
+   Known panels:
+     - AMB577PX01, 5.77", Samsung Galaxy S9 (samsung,s6e3ha8-amb577px01)
++    - AMB630QY01, 6.3", Google Pixel 3 XL (samsung,s6e3ha8-amb630qy01)
+ 
+ maintainers:
+   - Dzmitry Sankouski <dsankouski@gmail.com>
+ 
++required:
++  - compatible
++  - reset-gpios
++  - vdd3-supply
++  - vci-supply
++
+ allOf:
+   - $ref: panel-common.yaml#
++  - if:
++      properties:
++        compatible:
++          contains:
++            enum:
++              - samsung,s6e3ha8
++              - samsung,s6e3ha8-amb577px01
++    then:
++      required:
++        - vddr-supply
++  - if:
++      properties:
++        compatible:
++          contains:
++            const: samsung,s6e3ha8-amb630qy01
++    then:
++      required:
++        - vddpos-supply
++        - vddneg-supply
+ 
+ properties:
+   compatible:
+     oneOf:
+-      - const: samsung,s6e3ha8-amb577px01
++      - enum:
++          - samsung,s6e3ha8-amb577px01
++          - samsung,s6e3ha8-amb630qy01
+       - const: samsung,s6e3ha8
+         deprecated: true
+ 
+@@ -38,12 +66,11 @@ properties:
+   vddr-supply:
+     description: VDDR regulator
+ 
+-required:
+-  - compatible
+-  - reset-gpios
+-  - vdd3-supply
+-  - vci-supply
+-  - vddr-supply
++  vddpos-supply:
++    description: positive boost supply regulator (ELVDD)
++
++  vddneg-supply:
++    description: negative boost supply regulator (ELVSS)
+ 
+ unevaluatedProperties: false
+ 
+-- 
+2.43.0
+

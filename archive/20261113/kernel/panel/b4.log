@@ -1,0 +1,33 @@
+Grabbing thread from lore.kernel.org/all/20260924-crosshatch-panel-v2-0-08d5c7bf72fc@ixit.cz/t.mbox.gz
+Checking for newer revisions
+Grabbing search results from lore.kernel.org
+  Added from v3: 11 patches
+Analyzing 46 messages in the thread
+Will use the latest revision: v3
+You can pick other revisions using the -vN flag
+Checking attestation on all messages, may take a moment...
+---
+  [PATCH v3 1/10] dt-bindings: display: panel: s6e3ha8: Adjust to reflect the DDIC and panel used
+  [PATCH v3 2/10] dt-bindings: display: panel: samsung,s6e3ha8: Add AMB630QY01 panel
+  [PATCH v3 3/10] drm/panel: s6e3ha8: Introduce AMB577PX01 panel compatible
+  [PATCH v3 4/10] drm/panel: s6e3ha8: Prepare for supporting multiple panels
+  [PATCH v3 5/10] drm/panel: s6e3ha8: Correct the polarity logic within
+  [PATCH v3 6/10] drm/panel: s6e3ha8: Assert reset GPIO in unprepare
+  [PATCH v3 7/10] drm/panel: s6e3ha8: add Samsung AMB630QY01 (Google Pixel 3 XL) panel
+  [PATCH v3 8/10] arm64: dts: qcom: sdm845-samsung-starqltechn: Update panel compatible
+    + Reviewed-by: Abel Vesa <abel.vesa@oss.qualcomm.com> ([32m✓[0m DKIM/oss.qualcomm.com)
+  [PATCH v3 9/10] arm64: dts: qcom: sdm845-google: Move panel pins into common
+    + Reviewed-by: Abel Vesa <abel.vesa@oss.qualcomm.com> ([32m✓[0m DKIM/oss.qualcomm.com)
+  [PATCH v3 10/10] arm64: dts: qcom: sdm845-google-crosshatch: Add display panel
+    + Reviewed-by: Konrad Dybcio <konrad.dybcio@oss.qualcomm.com> ([32m✓[0m DKIM/oss.qualcomm.com)
+    + Reviewed-by: Abel Vesa <abel.vesa@oss.qualcomm.com> ([32m✓[0m DKIM/oss.qualcomm.com)
+  ---
+  [31m✗[0m No key: openpgp/david@ixit.cz
+---
+Total patches: 10
+---
+Cover: panel/v3_20261108_david_pixel_3_xl_display_panel_support.cover
+ Link: https://lore.kernel.org/r/20261108-crosshatch-panel-v3-0-87dd4ec4f7cc@ixit.cz
+ Base: base-commit ddfe51b0a0f5dc9e415cc2c8ad8db17532dd426b not known, ignoring
+ Base: not specified
+       git am panel/v3_20261108_david_pixel_3_xl_display_panel_support.mbx

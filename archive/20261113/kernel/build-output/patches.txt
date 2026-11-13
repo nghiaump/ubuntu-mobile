@@ -1,0 +1,12 @@
+b616e3368 HACK: arm64: dts: qcom: sdm845-google-crosshatch: Add S6SY761 touchscreen
+f949ecc2f HACK: arm64: advertise TEXT_OFFSET 0x80000 in Image header for Pixel 3 ABL
+32227868f arm64: dts: qcom: sdm845-google-crosshatch: Add display panel
+6eb91a1f6 arm64: dts: qcom: sdm845-google: Move panel pins into common
+35b2b8e88 arm64: dts: qcom: sdm845-samsung-starqltechn: Update panel compatible
+818e018cf drm/panel: s6e3ha8: add Samsung AMB630QY01 (Google Pixel 3 XL) panel
+62debfa89 drm/panel: s6e3ha8: Assert reset GPIO in unprepare
+fb2c30a8e drm/panel: s6e3ha8: Correct the polarity logic within
+35c190f17 drm/panel: s6e3ha8: Prepare for supporting multiple panels
+7d3904631 drm/panel: s6e3ha8: Introduce AMB577PX01 panel compatible
+6a6c59c0e dt-bindings: display: panel: samsung,s6e3ha8: Add AMB630QY01 panel
+fbdb80293 dt-bindings: display: panel: s6e3ha8: Adjust to reflect the DDIC and panel used

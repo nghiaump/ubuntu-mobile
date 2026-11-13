@@ -1,0 +1,5 @@
+# Gói deb "firefox" của noble chỉ là vỏ cài snap; kernel hiện chưa mount được squashfs của snap
+# (thiếu SQUASHFS_XZ) -> chặn để cài ubuntu-desktop-minimal không lỗi. Bỏ file này khi kernel đã hỗ trợ snap.
+Package: firefox
+Pin: release o=Ubuntu
+Pin-Priority: -1

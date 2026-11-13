@@ -1,0 +1,3 @@
+# NetworkManager (85-nm-unmanaged.rules) mặc định bỏ qua cổng mạng USB gadget (DEVTYPE=gadget).
+# Ta muốn NM quản lý usb0 bằng usb0.nmconnection (IPv4 172.16.42.1, method=shared -> DHCP cho Mac).
+SUBSYSTEM=="net", ENV{DEVTYPE}=="gadget", ENV{NM_UNMANAGED}="0"

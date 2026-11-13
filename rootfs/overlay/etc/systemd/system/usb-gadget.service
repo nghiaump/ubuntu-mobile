@@ -1,0 +1,15 @@
+[Unit]
+Description=USB gadget NCM + ACM (SSH qua USB tới 172.16.42.1)
+DefaultDependencies=no
+After=sys-kernel-config.mount systemd-modules-load.service
+Before=NetworkManager.service network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/usb-gadget.sh start
+ExecStop=/usr/local/sbin/usb-gadget.sh stop
+
+[Install]
+WantedBy=sysinit.target

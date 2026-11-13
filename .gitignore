@@ -1,0 +1,22 @@
+# --- File lớn: giữ trong thư mục (zip cả repo để cất), KHÔNG đưa vào git ---
+archive/**/*.zip
+archive/**/*.tar
+archive/**/*.tar.gz
+archive/**/*.tar.xz
+archive/**/*.tgz
+archive/**/*.bundle
+archive/**/*.deb
+archive/**/*.img
+archive/**/*.dtb
+archive/**/*.dtbo
+archive/**/*.cpio.gz
+archive/**/Image.gz
+# --- BÍ MẬT: mật khẩu Wi-Fi (netplan), SSH host key, cấu hình điện thoại ---
+archive/**/device/
+# known_hosts của điện thoại (không bí mật nhưng riêng máy)
+.ssh_known_hosts
+# --- Rác macOS / build ---
+.DS_Store
+._*
+__pycache__/
+*.pyc

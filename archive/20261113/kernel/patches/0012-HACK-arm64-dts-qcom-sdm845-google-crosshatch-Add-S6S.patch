@@ -1,0 +1,86 @@
+From b616e33688f07f9e09fd32f52dea647e3f850830 Mon Sep 17 00:00:00 2001
+From: pixel-builder <builder@localhost>
+Date: Fri, 13 Nov 2026 14:13:52 +0000
+Subject: [PATCH 12/12] HACK: arm64: dts: qcom: sdm845-google-crosshatch: Add
+ S6SY761 touchscreen
+
+Pixel 3 XL (C1) uses a Samsung S6SY761 touch controller (stock dtbo:
+"sec,sec_ts" @ 0x48 on qupv3_se2_i2c, irq GPIO 125, reset GPIO 99,
+I2C switch GPIO 136, dvdd pm8998_l14, avdd pm8998_l19, 1440x2960),
+unlike the STM FTS on Pixel 3 (blueline). Describe it for the mainline
+s6sy761 driver. Reset and I2C switch lines are hogged high because the
+driver does not manage them.
+
+Not upstream; values taken from the stock C1 DVT1.1 dtbo overlay.
+---
+ .../dts/qcom/sdm845-google-crosshatch.dts     | 50 +++++++++++++++++++
+ 1 file changed, 50 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts b/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
+index 3b788757b..5f7ea1210 100644
+--- a/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
++++ b/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
+@@ -2,6 +2,8 @@
+ 
+ /dts-v1/;
+ 
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/interrupt-controller/irq.h>
+ #include "sdm845-google-common.dtsi"
+ 
+ / {
+@@ -78,3 +80,51 @@ &mdss_dsi0_phy {
+ &wifi {
+ 	qcom,calibration-variant = "Google_crosshatch";
+ };
++
++&i2c2 {
++	/* Stock dtbo (C1 DVT1.1): qupv3_se2_i2c, qcom,clk-freq-out = 400 kHz */
++	clock-frequency = <400000>;
++
++	status = "okay";
++
++	touchscreen@48 {
++		/* Stock: "sec,sec_ts", firmware s6sy761.fw (kept in controller flash) */
++		compatible = "samsung,s6sy761";
++		reg = <0x48>;
++
++		interrupts-extended = <&tlmm 125 IRQ_TYPE_LEVEL_LOW>;
++
++		/* Stock: sec,regulator_dvdd = "pm8998_l14", sec,regulator_avdd = "pm8998_l19" */
++		vdd-supply = <&vreg_l14a_1p8>;
++		avdd-supply = <&vreg_l19a_3p3>;
++
++		pinctrl-0 = <&touchscreen_pins>;
++		pinctrl-names = "default";
++
++		touchscreen-size-x = <1440>;
++		touchscreen-size-y = <2960>;
++	};
++};
++
++&tlmm {
++	/*
++	 * The s6sy761 driver does not handle these lines:
++	 *  - GPIO 136 routes the touch I2C bus to the AP (high), like the
++	 *    blueline STM FTS switch-gpios in sdm845-next;
++	 *  - GPIO 99 is the controller reset, kept deasserted (stock
++	 *    sec_ts_reset_active state is output-high).
++	 */
++	ts-i2c-switch-hog {
++		gpio-hog;
++		gpios = <136 GPIO_ACTIVE_HIGH>;
++		output-high;
++		line-name = "touchscreen-i2c-switch";
++	};
++
++	ts-reset-hog {
++		gpio-hog;
++		gpios = <99 GPIO_ACTIVE_HIGH>;
++		output-high;
++		line-name = "touchscreen-reset";
++	};
++};
+-- 
+2.43.0
+

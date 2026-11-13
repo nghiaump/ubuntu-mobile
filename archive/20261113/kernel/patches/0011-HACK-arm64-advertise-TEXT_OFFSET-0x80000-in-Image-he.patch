@@ -1,0 +1,38 @@
+From f949ecc2fd126d5769a67c9165453e61bd15fe33 Mon Sep 17 00:00:00 2001
+From: pixel-builder <builder@localhost>
+Date: Fri, 13 Nov 2026 09:36:31 +0000
+Subject: [PATCH 11/12] HACK: arm64: advertise TEXT_OFFSET 0x80000 in Image
+ header for Pixel 3 ABL
+
+Recent Pixel 3 / 3 XL bootloaders (ABL b1c1-0.4-7617406) refuse to boot a
+mainline kernel whose Image header advertises text_offset = 0, see the
+"Booting" section of the Pixel 3 v7 series cover letter
+(20251214-pixel-3-v7-0-b1c0cf6f224d@ixit.cz): "you can also boot kernel
+when adding back TEXT_OFFSET (partial revert of 120dc60d)".
+
+Only the header field is restored. The kernel itself copes with being
+loaded 0x80000 above a 2 MiB boundary: early_map_kernel() derives the low
+bits of the virtual displacement from the physical placement
+(kaslr_offset = pa_base % MIN_KIMG_ALIGN) and relocates (RELOCATABLE=y).
+
+Not for upstream.
+---
+ arch/arm64/kernel/head.S | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/kernel/head.S b/arch/arm64/kernel/head.S
+index d6ba3c0af..322ec6d51 100644
+--- a/arch/arm64/kernel/head.S
++++ b/arch/arm64/kernel/head.S
+@@ -60,7 +60,7 @@
+ 	 */
+ 	efi_signature_nop			// special NOP to identity as PE/COFF executable
+ 	b	primary_entry			// branch to kernel start, magic
+-	.quad	0				// Image load offset from start of RAM, little-endian
++	.quad	0x80000				// Image load offset (TEXT_OFFSET) for Pixel 3 ABL, little-endian
+ 	le64sym	_kernel_size_le			// Effective size of kernel image, little-endian
+ 	le64sym	_kernel_flags_le		// Informative flags, little-endian
+ 	.quad	0				// reserved
+-- 
+2.43.0
+

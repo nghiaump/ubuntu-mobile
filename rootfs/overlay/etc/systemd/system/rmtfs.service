@@ -1,0 +1,18 @@
+# Thay unit của gói (Requires=qrtr-ns.service: name-server QRTR đã nằm trong kernel từ 5.7,
+# chạy thêm bản userspace sẽ tranh cổng). -r = KHÔNG ghi phân vùng EFS (chỉ giữ thay đổi trong RAM),
+# -P = dùng phân vùng modemst1/2,fsg,fsc, -s = tự khởi động remoteproc modem.
+[Unit]
+Description=Qualcomm remotefs service (EFS chỉ đọc)
+After=systemd-modules-load.service systemd-udev-settle.service
+# Firmware Wi-Fi (WCN3990) chạy TRONG modem: modem phải dừng SAU NetworkManager/wpa_supplicant.
+# Nếu modem chết trước, ath10k chờ timeout từng lệnh WMI (-110) khi tắt Wi-Fi -> shutdown đứng hình.
+# (systemd dừng theo thứ tự ngược với lúc khởi động -> Before= ở đây = dừng sau các unit đó.)
+Before=network-pre.target NetworkManager.service wpa_supplicant.service
+
+[Service]
+ExecStart=/usr/bin/rmtfs -r -P -s
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

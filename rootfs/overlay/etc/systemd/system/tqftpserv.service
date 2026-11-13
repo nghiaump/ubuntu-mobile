@@ -1,0 +1,18 @@
+# Thay unit của gói: dùng tqftpserv v1.3 (bản 1.0 của noble không hiểu /readonly/vendor/firmware{,_mnt/image}/
+# mà modem Pixel dùng để xin wlanmdsp.mbn) và bỏ Requires=qrtr-ns.service.
+[Unit]
+Description=QRTR TFTP service (v1.3)
+After=systemd-modules-load.service
+# Firmware Wi-Fi (WCN3990) chạy TRONG modem: modem phải dừng SAU NetworkManager/wpa_supplicant.
+# Nếu modem chết trước, ath10k chờ timeout từng lệnh WMI (-110) khi tắt Wi-Fi -> shutdown đứng hình.
+# (systemd dừng theo thứ tự ngược với lúc khởi động -> Before= ở đây = dừng sau các unit đó.)
+Before=network-pre.target NetworkManager.service wpa_supplicant.service
+
+[Service]
+ExecStart=/usr/local/bin/tqftpserv
+StateDirectory=tqftpserv
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

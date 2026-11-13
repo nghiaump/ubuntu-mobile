@@ -1,0 +1,62 @@
+Subject: [PATCH v3 0/10] Pixel 3 XL display panel support
+From: David Heidelberg <david@ixit.cz>
+Date: Sun, 08 Nov 2026 12:32:21 +0000
+Message-Id: <20261108-crosshatch-panel-v3-0-87dd4ec4f7cc@ixit.cz>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Introduce Samsung AMB630QY01 (Google Pixel 3 XL) panel.
+
+Includes refactoring and improvements to the S6E3HA8 DDIC which is also
+used by Samsung S9 (Korea version).
+
+Patches 9 and 11 switch to the new compatibles, so they must not reach
+the qcom tree before the driver patches land.
+
+Signed-off-by: David Heidelberg <david@ixit.cz>
+---
+Changes in v3:
+- Entire allOf goes after required: block. (Krzysztof)
+- Expalin dt-bindings changes more explicitly. (Krzysztof)
+- Dropped "Really assert reset on the failure" as requested by (Krzysztof)
+- Not addressed: "No, this is wrong. You just broke all the users of
+  this DTS.", due to non-existent usage outside of Linux and DTB for
+  this device being shipped always together with the kernel.
+- Link to v2: https://patch.msgid.link/20260924-crosshatch-panel-v2-0-08d5c7bf72fc@ixit.cz
+
+Changes in v2:
+- Rebase on top of next-20260923.
+- Cosmetic fix s/Cosmtetic/Cosmetic/ fix in the commit msg. (Neil)
+- Link to v1: https://patch.msgid.link/20260920-crosshatch-panel-v1-0-de6e9512da96@ixit.cz
+
+---
+David Heidelberg (10):
+      dt-bindings: display: panel: s6e3ha8: Adjust to reflect the DDIC and panel used
+      dt-bindings: display: panel: samsung,s6e3ha8: Add AMB630QY01 panel
+      drm/panel: s6e3ha8: Introduce AMB577PX01 panel compatible
+      drm/panel: s6e3ha8: Prepare for supporting multiple panels
+      drm/panel: s6e3ha8: Correct the polarity logic within
+      drm/panel: s6e3ha8: Assert reset GPIO in unprepare
+      drm/panel: s6e3ha8: add Samsung AMB630QY01 (Google Pixel 3 XL) panel
+      arm64: dts: qcom: sdm845-samsung-starqltechn: Update panel compatible
+      arm64: dts: qcom: sdm845-google: Move panel pins into common
+      arm64: dts: qcom: sdm845-google-crosshatch: Add display panel
+
+ .../bindings/display/panel/samsung,s6e3ha8.yaml    |  56 +++-
+ .../arm64/boot/dts/qcom/sdm845-google-blueline.dts |  18 --
+ arch/arm64/boot/dts/qcom/sdm845-google-common.dtsi |  16 ++
+ .../boot/dts/qcom/sdm845-google-crosshatch.dts     |  60 +++-
+ .../boot/dts/qcom/sdm845-samsung-starqltechn.dts   |   4 +-
+ drivers/gpu/drm/panel/panel-samsung-s6e3ha8.c      | 304 +++++++++++++++++----
+ 6 files changed, 372 insertions(+), 86 deletions(-)
+---
+base-commit: ddfe51b0a0f5dc9e415cc2c8ad8db17532dd426b
+change-id: 20260801-crosshatch-panel-06ce8a69fb7f
+
+Best regards,
+--  
+David Heidelberg <david@ixit.cz>
+
+
+
