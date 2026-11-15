@@ -31,6 +31,12 @@
 | `etc/systemd/system/pixel-wifi-fallback.service` + `usr/local/sbin/pixel-wifi-fallback.sh` | AP dự phòng |
 | `etc/systemd/system/pixel-sound.service` + `usr/local/sbin/pixel-sound.sh` | nạp card `snd-soc-sdm845` (thử lặp) + đặt mixer loa (xem `hardware/audio-camera-haptics.md`) |
 | `etc/wireplumber/main.lua.d/51-pixel3-audio.lua` | loa: `api.alsa.use-acp=false`, S16LE, tên "Loa Pixel 3 XL" |
+| `etc/systemd/system/pixel-charge-limit.service` + `usr/local/sbin/pixel-charge-limit.sh` + `etc/default/pixel-charge-limit` | giới hạn sạc 75–80% (cần patch 0008) |
+| `etc/systemd/system/pixel-power-log.{service,timer}` + `usr/local/sbin/pixel-power-log.sh` | mỗi 2 phút ghi pin/sạc/PD/nhiệt → `/var/log/pixel-power.csv`; toàn bộ log TCPM (debugfs, đọc là xoá) → `/var/log/pixel-tcpm.log` |
+| `etc/systemd/journald.conf.d/10-pixel.conf` | journal persistent, **SystemMaxUse=1G** (200M từng làm mất log 2 lần cạn pin) |
+| `etc/systemd/system/pixel-bt-addr.service` + `usr/local/sbin/pixel-bt-addr.sh` | gán địa chỉ Bluetooth ổn định cho WCN3990 (controller unconfigured) — xem `hardware/connectivity.md` |
+| `usr/local/bin/pin` | lệnh xem pin nhanh (`pin`, `pin -w`) |
+| `etc/udev/rules.d/80-pixel-udisks-ignore.rules` | ẩn mọi phân vùng Android khỏi udisks/GNOME (trừ userdata) — chặn tự mount |
 | `etc/systemd/system/qbootctl.service.d/10-pixel.conf` + symlink `multi-user.target.wants/qbootctl.service` | đánh dấu slot A/B thành công sau khi SSH/NM lên + 20 s (RUNBOOK §6.5). Gói `qbootctl` |
 Kết nối NetworkManager do `nmcli` tạo được Ubuntu lưu dạng **netplan** `/etc/netplan/90-NM-*.yaml` (600 root), không phải `system-connections/`.
 
@@ -49,3 +55,6 @@ Tắt màn hình (DPMS) = **reset máy**. Bắt buộc:
 ## Nút nguồn — "tắt màn hình mềm" (`pixel-powerkey.py`)
 Bấm: lưu độ sáng → backlight 0 → cảm ứng `inhibited=1`. Bấm lại: mở cảm ứng → trả độ sáng. **Không khoá phiên** (xem trên).
 Đọc trực tiếp `/dev/input/event*` tên `pm8941_pwrkey`, chống dội 0.4 s. Không tắt panel (xem trên).
+
+## Giao diện cảm ứng (bàn phím ảo, giữ lâu, tai thỏ, Chrome)
+Xem [`touch-ui.md`](touch-ui.md). Script: `scripts/97-chrome-osk.sh`, `scripts/98-gnome-shell-ext.sh`; extension `rootfs/gnome-extensions/pixel3xl-shell@pixel3xl`.

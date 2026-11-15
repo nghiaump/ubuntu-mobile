@@ -441,3 +441,115 @@ Vấn đề mở: (1) `systemctl reboot` treo (dùng `reboot -ff` tạm), (2) ch
 - Kết quả với patch 0005: `pw-play complete.oga` rc=0, ~1.3 s (trước: treo tới timeout).
 - Cài `qbootctl` 0.1.2 (Ubuntu noble). `sudo qbootctl`: _a Active0/Successful1, _b Active1/Successful0/Bootable1. Chưa ghi (chờ đồng ý).
 - 50-rootfs.sh thêm gói + enable qbootctl. RUNBOOK §6.2 #6 + §6.5.
+
+### 2026-11-13 ~23:40–00:00 — pin, camera/micro (tạm dừng), dùng độc lập
+- `health=Dead`: bug driver `max1720x` (dùng `regmap_set_bits` để "xoá" cờ cảnh báo → bật luôn VMN/VMX/TMN/TMX, Status 0x3380).
+  Patch 0006 (`regmap_clear_bits`), nạp nóng module → `Good`, Status 0x0080. Module đã chép vào out/kernel/modules + máy.
+- Camera trước + micro: patch 0007 (DT IMX355 CCI1/CSIPHY2; WCD9340 SLIMbus + SLIM Capture → MultiMedia2), thêm `SLIM_QCOM_NGD_CTRL` + nhóm CAMSS/WCD
+  vào pixel3.config; build #9 chạy nền — **CHƯA thử, chưa flash**. libcamera v0.8.0 (`scripts/56-libcamera.sh`): auto-mode chặn
+  "code from external" — người dùng cần tự chạy. Người dùng bảo tạm dừng camera.
+- Còn thiếu cho micro: `audio-routing` DMIC0/3/4 ← MIC BIAS1/3/4 trong &sound, mixer (AIF1_CAP Mixer SLIM TX0, SLIM TX0 MUX=DEC0, ADC MUX0=DMIC, DMIC MUX0=DMIC0, MultiMedia2 Mixer SLIMBUS_0_TX).
+- UPower `CriticalPowerAction=PowerOff` (thay HybridSleep).
+- Build #9 xong (~4 phút, chỉ DT + module mới). **`out/kernel/` giờ là #9 CHƯA THỬ** (camera/micro DT); `out/boot/boot-install.img` vẫn là #8 đang flash.
+  Đừng chạy `80-deploy-kernel.sh` (đẩy module #9) trước khi tạo boot.img #9 và thử bằng `fastboot boot`.
+
+### 2026-11-13 ~23:50 — đo điện năng khi chạy pin (max1720x current_now, mẫu 0.5 s, kernel #8)
+- Lần 1: A màn sáng (độ sáng 10) 315 mA/1.33 W; B tắt màn hình mềm 70 mA; C (B + offline cpu4-7 + nhân nhỏ ≤1056 MHz) 5 mA — **không tin được** (min âm, lệch thứ tự).
+- Lần 2 (60 s mỗi mục): B1 175 mA/746 mW; C 161 mA/685 mW; B2 163 mA/695 mW → tắt nhân lớn chỉ tiết kiệm ~5% (CPU đã 99% idle, psci_idle 3 mức).
+- Sàn ~130 mA khi màn tối: phần cứng (panel vẫn quét 60 Hz ở độ sáng 0 + MDSS/DSI, modem cho Wi-Fi, …). Chỉ suspend/tắt panel thật mới giảm mạnh — bị chặn bởi lỗi bật lại panel.
+- Ước lượng (charge_full 3093 mAh): màn sáng thấp ~10 h; tắt màn hình mềm ~18–19 h. KHÔNG thêm "ngủ nhẹ" CPU (lợi ích không đáng).
+
+### 2026-11-14 — Termius (iPhone) qua Tailscale
+- iPhone (tailnet 100.67.254.13) tới được sshd; lỗi "Too many authentication failures" vì Termius chỉ có public key. Server đã có sẵn cả 3 public key của Mac.
+- Người dùng import private key ed25519 của Mac vào Termius → vào được. (Khuyến nghị dài hạn: khoá riêng cho iPhone.)
+
+### 2026-11-14 ~00:10–00:25 — giới hạn sạc + sự cố fwupd mount modem_b
+- qcom_smbx chỉ có `status` (ghi = suspend USBIN → chạy pin) và `current_max`. Patch 0008: `charge_behaviour` auto/inhibit-charge qua `CHARGING_ENABLE_CMD` (0x42 bit0).
+  Build module (~3 phút), nạp nóng (máy đang chạy pin). `pixel-charge-limit.service` (75–80%).
+- Kiểm chứng cắm USB Mac: inhibit → pin 0 mA, Not charging; auto → ~440 mA Charging; trả về inhibit. `pmi8998-charger current_now/voltage_now` = 0 (IIO chưa chạy).
+- dmesg: `FAT-fs (sda14): Volume was not properly unmounted` — `udisksd` mount `/dev/sda14` = **modem_b** "on behalf of uid 0" lúc fwupd-refresh khởi động fwupd (dò ESP), unmount ngay.
+  Xử lý: mask fwupd(+refresh timer), `80-pixel-udisks-ignore.rules` (UDISKS_IGNORE mọi sd* trừ userdata). Kiểm: sda14 UDISKS_IGNORE=1, sda21 không.
+- 50-rootfs.sh enable pixel-charge-limit; 91-xrdp.sh mask fwupd. Module qcom_smbx.ko chép vào out/kernel (bản #9).
+
+### 2026-11-14 — tháo SSD
+- Chép boot-install.img #8 (đang ở boot_b) + 4 module thay nóng vào `archive/20261113/kernel/running-20261114/`. `hdiutil detach /Volumes/pixelwork`, `diskutil eject /Volumes/LIB`. Lần sau: cắm SSD rồi `scripts/00-workspace.sh`.
+
+### 2026-11-14 — sạc nhanh, micro, camera (kernel #10 + DTB 0011, chỉ fastboot boot)
+- Sạc: mainline qcom_smbx khoá FCC 1 A ("fire hazard") + ICL theo BC1.2 (SDP 0.5/CDP,DCP 1.5 A); không có Type-C/PD cho PMI8998
+  (mainline chỉ pm8150b/pmi632). Patch 0009: ICL theo Rp (TYPE_C_STATUS_1: 0x40=1.5 A, 0x20=3 A), `constant_charge_current` ghi được
+  (trần = battery constant-charge-current-max, DT 0010 = 3 A, khởi động 1 A). pixel-charge-limit.sh áp bảng google,chg-cc-limits
+  (temp 0/10/20/42/46/48/55 °C × CV 4.2/4.3/4.4 V, % của 3430 mAh). Cổng Mac: Type-C 0x40 → ICL 1.5 A, FCC 3 A, nạp ~1.15 A. CHƯA thử với cục PD.
+- Micro: WCD9340 nhận (chip id 0x108), SLIMbus NGD chạy, card có pcm2c (MultiMedia2). Mixer = UCM Ubuntu (AIF1_CAP Mixer SLIM TX0,
+  CDC_IF TX0 MUX=DEC0, ADC MUX0, DMIC MUX0/AMIC MUX0, MultiMedia2 Mixer SLIMBUS_0_TX). Ghi được nhưng **toàn 0** với mọi DMIC0-5 và ADC1-4.
+  Tìm ra: MCLK (ln_bb_clk2) không bật khi thu — supply "MCLK" chỉ nối qua route → 0011 thêm "AIF1 CAP","MCLK" → clk count 1, vẫn 0.
+  Codec regs lúc thu: MCLK_CFG 9.6 MHz, MCLK_CONTROL 1, FS_CNT 0x0d, ROUTER_TX_MUX 0x02 (DEC0), DMIC0_CTL 0x05, TX0_PATH_CTL 0x24; ifd TX_PORT_CFG(0)=0x05.
+  Chưa rõ: dữ liệu SLIM ch128 có tới AFE không (không có ftrace trong kernel). Cảnh báo `wcd934x_enable_efuse_sensing` lúc probe (vô hại?).
+- Camera: probe imx355 @0x1a (gpio21) = -ENXIO. 0011 khai báo cả 2 cảm biến: **camera gpio21/CSIPHY2 trả lời ở 0x10** (imx355 bind 17-0010);
+  node 0x1a (gpio9/gpio14, CSIPHY1) lỗi pinctrl vì 2 node cùng xin gpio15 (MCLK2) → camss chưa tạo subdev. Cần: bỏ node thứ 2 hoặc dời pinctrl MCLK.
+- Trạng thái máy: RAM-boot #10 + DTB 0011; boot_b vẫn #8; /lib/modules = bản #10 (bản #8 lưu ở 7.4.0-rc2-pixel3+.bak-k8).
+- Người dùng chọn (c) + "đồng ý": flash boot_b = boot-install.img #10+DTB0011 (sha bcedf902…). fastboot reboot → slot_suffix _b, qbootctl Successful 1,
+  system running, loa OK (pw-play rc 0), Tailscale OK, nạp ~1.1–1.2 A từ Mac (ICL 1.5 A, FCC 3 A). Image lưu archive/20261113/kernel/running-20261114-k10/.
+
+### 2026-11-14 — USB PD 9 V (driver mới, chỉ fastboot boot)
+- Mainline không có Type-C cho PMI8998 (Type-C nằm trong USBIN 0x1300 của SMB2); PD PHY 0x1700 cùng IP với PM8150B (stock qcom,qpnp-pdphy, 7 irq, vdd L24).
+- Patch 0012: backend port `qcom_pmic_typec_port_smb2.c` (sink): get_cc từ TYPE_C_STATUS_1/4 (Rp + orientation), get_vbus STATUS_4 bit6,
+  set_polarity = VCONN_EN_ORIENTATION + TYPEC_SPARE_CFG (như vendor khi pd_active), EXIT_SNK_BASED_ON_CC (hard reset), set_current_limit → ICL +
+  ADAPTER_ALLOW 5V_TO_9V; irq type-c-change (USBIN irq 7, không trùng qcom_smbx). Glue qcom_pmic_typec.c: compatible "qcom,pmi8998-typec".
+  Thanh ghi lấy từ vendor smb-reg.h/smb-lib.c (LineageOS android_kernel_google_msm-4.9, chỉ đọc tham khảo).
+- Patch 0013 (DT): typec@1300 reg <0x1300>,<0x1700>, sink-pdos 5V/3A + 9V/2A. 0014: qcom_smbx bỏ qua đặt ICL theo Rp khi USBIN > 6 V
+  (work 1.5 s sau cắm từng ghi đè 3 A lên hợp đồng 9V/2A).
+- Thử với cổng Mac: PD 3.0, Mac chỉ chào PDO 5V/3A → SNK_READY, ICL 3 A.
+- Thử với cục PD: chào 5/9/12/15V 3A, 20V 5A, PPS → "Requesting PDO 1: 9000 mV, 2000 mA" → PS_RDY → SNK_READY. USBIN đo 8.98 V.
+  Dòng nạp ~1.0–1.25 A vì pin 74–78% đang TAPER (BATTERY_CHARGER_STATUS_1 0x1006=0x04), không phải giới hạn PD. pmi8998-charger current_now/voltage_now
+  chạy (rradc) khi đang sạc.
+- Lưu ý: depmod phải chạy sau khi thay module (alias mới không tự nạp).
+- "đồng ý" → flash boot_b f4edbb1b… (Image #10 + DTB 0013). Boot OK, slot _b Successful, PD 3.0 với Mac tự lên lúc boot.
+  `systemd-backlight@backlight:ae94000.dsi.0` failed 1 lần (chạy sớm khi panel chưa sẵn sàng) → restart OK → system running. Theo dõi.
+
+### 2026-11-15 — kiểm tra máy chạy server game 24/7
+- Nhiệt: SoC 37–38 °C, pin 29.6 °C (ngừng nạp), lúc nạp pin tới ~42 °C (bảng Google tự giảm dòng). CPU không bị hạ xung. Load ~0.4, RAM khả dụng 1.7 GB, không swap, kswapd chạy.
+- PD 9V/2A ổn định suốt boot hiện tại (2h40). Pin 80% inhibit, USB cấp điện.
+- 🔴 2 lần chết vì cạn pin (boot -2 kết thúc 14/11 20:03, boot -1 kết thúc 15/11 06:58, ngay sau "Running on LOW Battery"; không có chuỗi tắt máy);
+  log hệ thống mất vì journal chạm 200M (nhiều log sshd do Mac deploy qua SSH). Nguyên nhân chưa xác định.
+- Người dùng đồng ý (1) logger điện năng + (2) journal 1G: pixel-power-log.timer (2 phút) → /var/log/pixel-power.csv + /var/log/pixel-tcpm.log; SystemMaxUse=1G.
+  Lần đầu bị auto-mode chặn (đổi máy đang chạy server khi người dùng chỉ hỏi kiểm tra) → hỏi lại → đồng ý. zram, giảm SSH: không làm.
+
+### 2026-11-15 — Chrome không hiện bàn phím ảo
+- google-chrome-stable 157 (arm64), phiên GNOME Wayland. GNOME chỉ hiện OSK khi app dùng text-input-v3; Chrome mặc định không.
+- `scripts/97-chrome-osk.sh`: ghi đè ~/.local/share/applications/{google-chrome,com.google.Chrome}.desktop thêm
+  `--ozone-platform=wayland --enable-wayland-ime --wayland-text-input-version=3` (undo: `scripts/97-chrome-osk.sh <host> undo`). Cần thoát hẳn Chrome rồi mở lại.
+- Sau khi mở lại: Chrome chạy đúng `--ozone-platform=wayland ... text-input-version=3` nhưng OSK vẫn không hiện. Touchscreen được udev nhận đúng (ID_INPUT_TOUCHSCREEN=1, INPUT_PROP_DIRECT).
+  Bật gsettings (97-chrome-osk.sh): a11y screen-keyboard-enabled=true, a11y mouse secondary-click-enabled=true (0.8 s). Chờ người dùng thử.
+  Lưu ý: secondary-click của GNOME áp cho sự kiện con trỏ; app Wayland nhận cảm ứng gốc tự xử lý đè lâu (Chrome có sẵn trên trang web).
+
+### 2026-11-15 — tai thỏ (notch)
+- Panel 1440x2960 (DSI-1), scale 2. GNOME 46 không hỗ trợ display cutout. Cắt ở driver panel = đổi mode/tắt-bật panel → nguy cơ treo (RUNBOOK §6) → không làm.
+- Viết extension riêng `rootfs/gnome-extensions/pixel-notch@pixel3xl` (chrome đen affectsStruts + dời panelBox xuống; chỉ khi màn chính là 1440x2960 vật lý;
+  độ cao px vật lý trong ~/.config/pixel-notch-px, mặc định 172 — ƯỚC LƯỢNG, chưa có số đo chuẩn). Cài: `scripts/98-gnome-notch.sh [host] [px]`, gỡ: `... undo`.
+- Đã chép + thêm vào enabled-extensions; GNOME Wayland chỉ nạp extension mới sau khi phiên khởi động lại (chưa làm — chờ người dùng đăng xuất/vào lại).
+- Kết quả thử: zenity (GTK) hiện OSK, Chrome không. Mutter 46 text_input_commit_state: enable lần 1 chỉ focus_in, lần 2 (đã focus) mới
+  set_input_panel_state(ON); GTK gửi lại enable khi chạm, Chrome chỉ 1 lần. Notch v1 không ăn: ở scale nguyên Monitor là px vật lý
+  nhưng geometry_scale=2 → điều kiện 1440x2960 sai → h=0.
+- Extension đổi tên `pixel3xl-shell@pixel3xl` (v2): notch theo tỉ lệ khung + mở OSK khi `Main.inputMethod` `cursor-location-changed`
+  có currentFocus mà OSK ẩn. Script `scripts/98-gnome-shell-ext.sh` (thay 98-gnome-notch.sh, tự gỡ bản cũ). Cần đăng nhập lại.
+- Giữ lâu = chuột phải mọi app: kernel thiếu CONFIG_INPUT_UINPUT → chưa làm.
+- Tài liệu mới: docs/software/touch-ui.md (thao tác nhanh, cơ chế, bẫy); mục lục docs/README.md, RUNBOOK §2, rootfs-services trỏ tới.
+- Người dùng: tai thỏ đẹp, OSK Chrome hiện ✅. Lỗi mới: cửa sổ Chrome phóng to bị dải đen/thanh trên che, không chạm được.
+  Gốc: _updateRegions chỉ tính strut khi actor chạm mép màn hình; panelBox dời xuống mất strut; dải đen reactive chặn chạm.
+  v3: strut vô hình (reactive false) phủ notch+panelBox.height, dải đen không nhận chạm. Đã cài, chờ đăng nhập lại.
+- Giữ lâu trên icon desktop không ăn (dock thì có): icon do DING (app GTK3 riêng) chỉ nhận nút chuột 3. Viết bộ vá
+  /usr/local/sbin/pixel-ding-longpress (overlay) + hook apt + scripts/99-ding-longpress.sh: hẹn giờ 600 ms với sự kiện TOUCHSCREEN, mở menu khi
+  nhấc tay; vá 3 file DING (check → vá → pkill ding.js, extension tự chạy lại). DING chạy lại không lỗi. Chờ người dùng thử.
+- Rà riêng tư trước khi công khai: patch 0005–0014 có Signed-off-by mang email cá nhân (do `git commit -s` dùng git config của cây kernel)
+  → thay bằng `pixel3 port <pixel3@localhost>`, 30-kernel.sh đặt cứng identity này. Script 97/98/99 dùng $PIXEL_HOST (mặc định USB).
+  IP Tailscale/SSID trong docs → placeholder. NOTES.md vẫn còn (nhật ký cá nhân) → checklist công khai.
+- README.md cấp repo mới (badge, bảng phần cứng, sơ đồ mermaid, bắt đầu nhanh, patch, bài học, an toàn, ghi công, giấy phép) + docs/PUBLISHING.md
+  (checklist công khai: NOTES.md còn SSID/IP, archive/device, firmware, lịch sử git có email ở commit đầu, chọn LICENSE). Chưa commit (người dùng chưa yêu cầu).
+- "đổi 90": /etc/default/pixel-charge-limit STOP=90 START=85 (overlay + máy), restart dịch vụ → auto, nạp ~1.16 A từ 80 %. Description dịch vụ bỏ "75-80%".
+  Pin: charge_full 3135 / design 3456 mAh (~91 %). Nhắc: Battery Defender Google (≥4.27 V + ≥35 °C 6 h) → nếu hay nóng nên về 80/75.
+- Defender (yêu cầu người dùng): pixel-charge-limit.sh thêm DEFEND_* (35 °C liên tục 60 phút ở ≥80 % → giữ 75–80, ngắt USBIN bằng status=Unknown
+  để xả về 80; thoát khi ≤32 °C 30 phút hoặc rút sạc). Thử ngắt/cấp lại tay 10 s OK (xả 175 mA, usb0 vẫn lên). Unit thêm ExecStopPost cấp lại nguồn.
+  Thử ngưỡng 30 °C/1 phút: bật → ngắt → xả 146 mA → trả cấu hình → nạp lại. Tài liệu: power-battery.md §Defender.
+- Bluetooth: kernel OK (crbtfw21/crnv21, setup completed) nhưng bluetoothctl "No default controller": btmgmt config = Unconfigured, missing public-address
+  (ABL không truyền địa chỉ). pixel-bt-addr.service gán địa chỉ ổn định sha256(serial) (locally administered). Bẫy btmgmt: </dev/null thoát trước phản hồi,
+  không stdin thì treo (systemctl start treo) → `sleep 2 | timeout 5 btmgmt`. Kiểm chứng bằng rmmod/modprobe hci_uart. Quét thấy thiết bị (RSSI -59…-100).

@@ -46,6 +46,11 @@ Cập nhật lần cuối: 2026-11-13 (giữa Pha 5).
 - Hoặc Windows App → `172.16.42.1` (qua cáp) → Cài đặt Wi-Fi của GNOME (cả Wi-Fi có trang đăng nhập, khi đã có Firefox).
 - Lưu sẵn hotspot iPhone để máy tự vào mạng ở bất cứ đâu (Tailscale tự lên theo).
 
+### Giao diện cảm ứng (chi tiết: `software/touch-ui.md`)
+- Bàn phím ảo / cờ Chrome / giữ-lâu: `scripts/97-chrome-osk.sh [host]`.
+- Extension GNOME tự viết (tai thỏ + OSK cho Chrome): `scripts/98-gnome-shell-ext.sh [host] [px]` → **đăng xuất/đăng nhập lại** mới nạp code mới.
+- Giữ lâu = chuột phải cho MỌI app: chưa có (cần kernel `CONFIG_INPUT_UINPUT`).
+
 ### Khởi động lại / vào fastboot
 | Mục đích | Lệnh |
 |---|---|
@@ -190,7 +195,13 @@ chỉ khi thật cần, hỏi người dùng). **Không bao giờ `fastboot flas
 - ✅ Archive đầy đủ trong `archive/20261113/` (2.7 GB, có factory image).
 - ⏳ "Tablet": scale giao diện, bàn phím ảo, chia sẻ chính màn hình qua RDP (thay xrdp).
 - ✅ Kernel #8 (boot_b, 2026-11-13 ~23:35): **% pin** (MAX1720x), **loa** (2× CS35L36, PipeWire, phím âm lượng — patch 0004 + 0005). **qbootctl** đánh dấu slot b mỗi lần boot (§6.5).
-- ⏳ Camera trước (IMX355), `health=Dead` của max1720x, micro. Firefox: bỏ pin apt rồi `snap install firefox`.
+- ✅ 2026-11-15: **Bluetooth** (`pixel-bt-addr.service` gán địa chỉ), **Defender** sạc (35 °C/60 phút → 80 %).
+- ✅ 2026-11-15: giới hạn sạc nâng lên **90/85** (`/etc/default/pixel-charge-limit`); pin còn 3135/3456 mAh (~91 %).
+- ✅ 2026-11-14: `health=Dead` sửa (patch 0006, module); **giới hạn sạc 75–80%** (patch 0008 module + `pixel-charge-limit`); lệnh `pin`; Termius qua Tailscale; chặn fwupd/udisks mount phân vùng Android.
+- ⏳ Camera trước (IMX355) + micro (patch 0007 đã viết, build #9 có, CHƯA thử; libcamera cần người dùng tự chạy `scripts/56-libcamera.sh`). Ngủ thật (suspend) cần sửa bật lại panel.
+- ✅ 2026-11-14: flash **kernel #10 + DTB 0011** (đủ patch 0001–0011) — module trên máy khớp kernel. Sạc nhanh 5 V tới 3 A (theo Rp Type-C + bảng Google); PD 9 V chưa có (mainline thiếu Type-C/PD cho PMI8998).
+- ✅ 2026-11-14 chiều: **USB PD 9 V** (patch 0012–0014, flash boot_b `f4edbb1b…`). Sạc từ cục PD: 9 V/2 A.
+- 🔴 Micro: WCD9340 + SLIMbus lên, thu được nhưng dữ liệu = 0 (xem NOTES 2026-11-14). 🟡 Camera: IMX355 trước ở 0x10; sửa DT (bỏ node 0x1a / pinctrl MCLK) + libcamera. Firefox: bỏ pin apt rồi `snap install firefox`.
 - ❓→✅ "Boot vào Android" ở Pha 3: nhiều khả năng do hết lượt thử slot A/B (§6.5), đã phòng bằng qbootctl.
 
 ---
@@ -233,6 +244,11 @@ Mọi đường dẫn tới "tắt màn hình" đều nguy hiểm: idle-delay (G
 - KHÔNG đổi các khoá dconf trong `/etc/dconf/db/local.d/locks/90-pixel-no-blank` và `/etc/gdm3/greeter.dconf-defaults` (mục pixel3).
 - KHÔNG bật khoá màn hình, suspend, "Blank Screen" trong Settings; nút nguồn chỉ dùng `pixel-powerkey` (backlight 0).
 - Muốn "tắt màn hình" → `backlight=0` (AMOLED đen gần như không tốn điện), không DPMS.
+- **Không để gì tự mount phân vùng Android**: `80-pixel-udisks-ignore.rules` + fwupd bị mask (2026-11-14 fwupd dò ESP đã mount `modem_b` qua udisks). Gói mới kéo theo dịch vụ dò ổ đĩa → kiểm `journalctl | grep udisksd.*Mounted`.
+- **Máy làm server 24/7 (từ 2026-11-15)**: máy từng **chết vì cạn pin 2 lần dù được cho là đang cắm sạc** (14/11 20:03, 15/11 06:58; log đã mất do journal đầy).
+  Điều tra: `column -s, -t < /var/log/pixel-power.csv | tail` (cap, batt_mA âm = xả, usb_online, icl_eff_mA, chg_state 7=disable/inhibit, typec_mode) và `/var/log/pixel-tcpm.log`.
+  SSH lặp lại từ `<ip-tailscale-máy-deploy>` = máy Mac deploy server game (bình thường).
+- Pin cạn (5%): `/etc/UPower/UPower.conf` `CriticalPowerAction=PowerOff` (mặc định `HybridSleep` = ngủ = tắt panel = treo). Áp bởi `scripts/91-xrdp.sh`.
 - Sau khi cài/đổi gói GNOME hoặc thêm user mới: kiểm `gsettings writable … idle-delay` = false và `disable-lock-screen` = true.
 - Thử thay đổi rủi ro: theo dõi uptime ≥ 11 phút (vượt các mốc 30 s/60 s/300 s) trước khi coi là ổn.
 - Mọi lần khởi động lại do Claude gây ra phải báo trước cho người dùng; nếu người dùng hỏi "sao tự khởi động lại", làm §6.1.

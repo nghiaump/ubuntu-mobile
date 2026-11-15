@@ -69,3 +69,49 @@ Cấu hình sạc gốc của Google (`google,charger`, stock dtbo — Android, 
   `systemctl reboot --reboot-argument=bootloader` / `rebootarg bootloader` → fastboot.
 - **Nút nguồn trong Ubuntu**: `pixel-powerkey.service` (bấm = màn hình mềm tắt/bật, xem [rootfs-services](../software/rootfs-services.md)).
   GNOME `power-button-action='nothing'` (khoá), logind `HandlePowerKey=ignore`. Giữ ~10 s = reset cứng phần cứng.
+
+## Tiêu thụ đo thực tế (2026-11-13, kernel #8, chạy pin, Wi-Fi + Tailscale bật)
+| Trạng thái | Dòng | Công suất | Thời lượng ước tính (3093 mAh) |
+|---|---|---|---|
+| Màn sáng, độ sáng 10/1023, rảnh | ~300 mA | ~1.3 W | ~10 h |
+| Tắt màn hình mềm (nút nguồn: backlight 0, cảm ứng tắt) | ~165 mA | ~0.7 W | ~18–19 h |
+| + tắt 4 nhân lớn, nhân nhỏ ≤ 1 GHz | ~160 mA | ~0.69 W | lợi ~5% → không áp dụng |
+Sàn ~130 mA là phần cứng (panel vẫn quét ở độ sáng 0, MDSS/DSI, modem cho Wi-Fi). Muốn giảm mạnh cần suspend → cần sửa tắt/bật panel (RUNBOOK §6.3).
+Đo: `current_now` của `max1720x` (µA, âm = xả), lấy trung bình ≥ 60 s; lần đo 40 s đầu tiên cho số vô lý (5 mA) — luôn đo lặp B→C→B.
+
+## Giới hạn sạc (2026-11-14) ✅ — đang dùng **STOP=90 / START=85** (từ 2026-11-15, theo yêu cầu: thêm dự phòng mất điện cho server)
+- Mặc định trong script nếu thiếu file cấu hình: 80/75. 80 % ≈ 4.16 V; 90 % ≈ 4.27–4.30 V lúc nghỉ (pin tối đa 4.4 V).
+- Lưu ý: Battery Defender của Google (bảng trên) coi ≥ 4.27 V + ≥ 35 °C kéo dài 6 h là có hại → nếu pin hay nóng ≥ 35 °C, quay về 80/75.
+- Dự phòng khi mất điện (tải server ~165 mA, màn tắt): từ 80 % ≈ 15 h, từ 90 % ≈ 17 h (charge_full 3135 mAh, 2026-11-15).
+
+- Kernel: patch 0008 thêm `charge_behaviour` cho `pmi8998-charger` (bit `CHARGING_ENABLE_CMD` 0x42 của SMB2). `inhibit-charge` = ngừng nạp pin, **USB vẫn cấp điện cho máy**
+  (khác `status` ghi được sẵn có — cái đó suspend cả USBIN, máy chạy bằng pin).
+- Userspace: `pixel-charge-limit.service` → `/usr/local/sbin/pixel-charge-limit.sh`, kiểm mỗi 60 s: ≥ STOP → inhibit, ≤ START → auto.
+  Cấu hình `/etc/default/pixel-charge-limit` (`ENABLE=1 STOP=80 START=75`), đổi xong `sudo systemctl restart pixel-charge-limit`.
+- Kiểm chứng (cắm USB Mac, pin 97%): inhibit → dòng pin 0 mA, `status=Not charging`; auto → nạp ~440 mA, `Charging`.
+- `pmi8998-charger` `current_now`/`voltage_now` (kênh IIO USBIN) đọc 0 — chưa dùng được để đo dòng vào.
+- Xem nhanh: lệnh `pin` (hiện "giới hạn: NGỪNG NẠP").
+
+## USB PD 9 V (2026-11-14) ✅
+- Type-C của PMI8998 nằm trong khối USBIN (0x1300) của SMB2 — mainline không có driver; PD PHY (0x1700) cùng IP PM8150B.
+- Patch 0012 (backend `qcom_pmic_typec_port_smb2.c`) + 0013 (DT `typec@1300`) + 0014 (qcom_smbx không ghi đè ICL khi > 6 V).
+- Sink PDO: 5 V/3 A, **9 V/2 A** (18 W). Adapter allowance `USBIN_ADAPTER_ALLOW_CFG`=5V_TO_9V (bootloader đã đặt sẵn 0x08).
+- Kiểm chứng: cục PD (5/9/12/15/20 V + PPS) → `Requesting PDO 1: 9000 mV, 2000 mA` → SNK_READY, USBIN 8.98 V. Cổng Mac: PD 3.0 5V/3A.
+- Xem: `cat /sys/class/typec/port0/power_operation_mode` (usb_power_delivery), log TCPM: `sudo sh -c 'cat /sys/kernel/debug/usb/tcpm-*/log'`,
+  điện áp/dòng vào: `/sys/class/power_supply/pmi8998-charger/{voltage_now,current_now}` (chỉ khi đang sạc).
+- Hạn chế: hợp đồng PD 5 V (Mac 3 A) vẫn bị work 1.5 s của qcom_smbx hạ về Rp (1.5 A) — an toàn nhưng chưa tối ưu. Chưa thử PD hard reset/PPS.
+
+## Defender — tự hạ về 80 % khi pin nóng (2026-11-15) ✅
+Giống "Battery Defender" của Google (stock: ≥ 4.27 V + ≥ 35 °C kéo dài 6 h → xả về 80 %), trong `pixel-charge-limit.sh`:
+| Bước | Điều kiện (mặc định, `/etc/default/pixel-charge-limit`) | Hành động |
+|---|---|---|
+| Bật | pin ≥ `DEFEND_STOP` (80) % **và** ≥ `DEFEND_TEMP` (35) °C **liên tục** `DEFEND_MINUTES` (60) phút | giới hạn chuyển `DEFEND_START`–`DEFEND_STOP` (75–80) |
+| Xả | đang Defender, pin > 80 %, có nguồn USB | **ngắt nguồn USB vào** (`echo Unknown > …/pmi8998-charger/status` → `USBIN_SUSPEND`, bit 0 của `USBIN_CMD_IL` 0x1340) → máy chạy pin |
+| Cấp lại | pin ≤ 80 % hoặc thoát Defender | `echo Charging > …/status` |
+| Tắt | nguội ≤ `DEFEND_RELEASE_TEMP` (32) °C liên tục `DEFEND_RELEASE_MINUTES` (30) phút, hoặc rút sạc | về giới hạn thường (90/85) |
+- Ngưỡng thời gian để **không phản ứng với nhiệt do sạc nhanh** (pin lên 38–42 °C vài chục phút khi nạp 85→90 %). Google dùng 6 giờ.
+- Trạng thái lưu `/run/pixel-charge-defend` (giữ qua restart dịch vụ, mất khi reboot). `DEFEND=0` để tắt.
+- **An toàn:** không bao giờ ngắt nguồn vào khi pin ≤ 80 %; dịch vụ khởi động luôn ghi `Charging`; `ExecStopPost` cấp lại nguồn vào khi dịch vụ dừng/crash.
+- Khi đang ngắt nguồn vào: `online=0`, `status=Discharging`; mạng USB (gadget) vẫn chạy.
+- Kiểm chứng 2026-11-15 (ngưỡng thử 30 °C/1 phút): "DEFENDER BẬT" → "ngắt nguồn USB vào, xả từ 82 % về 80 %" (pin xả 146 mA) → trả cấu hình thật → nạp lại ~1 A.
+- Log: `journalctl -u pixel-charge-limit | grep DEFENDER`; cột `behaviour`/`usb_online` trong `/var/log/pixel-power.csv`.

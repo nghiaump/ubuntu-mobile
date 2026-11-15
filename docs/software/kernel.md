@@ -12,7 +12,18 @@
 | | `0003-HACK-…-add-max1720x-fuel-gauge.patch` (% pin) |
 | | `0004-HACK-…-add-speaker-amps-and-sound-card.patch` (2× CS35L36 trên QUAT TDM + node `sound`; pinctrl IRQ **bias-pull-up** — thiếu thì bão IRQ) |
 | | `0005-ASoC-qcom-q6asm-reset-playback-queue-state-on-re-prepare.patch` — **sửa lỗi thật** (ứng viên gửi upstream): prepare lại không reset `queue_ptr`/`dsp_buf`/`hw_ptr` → PipeWire phát 1 period rồi kẹt. Chỉ ảnh hưởng module `q6asm`, `q6asm-dai` |
-| Bản đang chạy | `7.4.0-rc2-pixel3+ #8` (flash boot_b 2026-11-13 23:3x, `boot-install.img` sha256 `b810fea5…52d2`); module q6asm/q6asm-dai build lại có 0005 (kernel image không đổi) |
+| | `0006-power-supply-max1720x-clear-alert-status-bits.patch` — **sửa lỗi thật**: driver "xoá" cờ cảnh báo bằng `regmap_set_bits` → `health=Dead` vĩnh viễn |
+| | `0007-HACK-…-add-front-camera-and-wcd9340-mics.patch` — DT IMX355 + WCD9340/SLIMbus — **CHƯA THỬ trên máy** |
+| | `0008-power-supply-qcom_smbx-add-charge_behaviour.patch` — `charge_behaviour` auto/inhibit-charge (ngừng nạp, USB vẫn cấp điện) cho giới hạn sạc |
+| | `0009-power-supply-qcom_smbx-typec-current-and-charge-current.patch` — ICL theo Rp Type-C (1.5/3 A), `constant_charge_current` ghi được (trần DT) |
+| | `0010-HACK-…-charge-current-cap-mic-routing.patch` — battery `constant-charge-current-max-microamp` 3 A; DMIC ← MIC BIAS |
+| | `0011-HACK-…-mclk-capture-both-front-cameras.patch` — route MCLK cho thu âm; khai báo 2 camera trước (0x10 gpio21/CSIPHY2 ✅ nhận chip; 0x1a gpio9 lỗi pinctrl gpio15 trùng) |
+| | `0012-usb-typec-qcom-pmic-typec-add-PMI8998-SMB2-sink-port.patch` — **driver mới**: backend Type-C sink cho SMB2 (PMI8998) + dùng lại PD PHY PM8150B/TCPM → USB PD |
+| | `0013-HACK-…-usb-pd-sink.patch` — DT typec@1300 (USBIN 0x1300 + PD PHY 0x1700), sink-pdos 5V/3A, 9V/2A |
+| | `0014-power-supply-qcom_smbx-keep-PD-input-limit.patch` — không ghi đè ICL theo Rp khi USBIN > 6 V |
+| Bản đang chạy (2026-11-14 chiều) | **`#10` + DTB 0013** (USB PD) sha256 `f4edbb1b…`, module 0012/0014 — `archive/20261113/kernel/running-20261114-k10pd/` |
+| Bản trước | **`#10` + DTB 0011** flash boot_b, sha256 `bcedf902…344a` (lưu `archive/20261113/kernel/running-20261114-k10/`) |
+| Bản trước | `7.4.0-rc2-pixel3+ #8` (flash boot_b 2026-11-13 23:3x, `boot-install.img` sha256 `b810fea5…52d2`); module q6asm/q6asm-dai build lại có 0005 (kernel image không đổi) |
 | Lưu trữ | `archive/*/kernel/linux-pixel3-<sha>.tar.xz` (toàn bộ source đã vá) + `patches/` + `config-*` |
 
 ## Config (`kernel/pixel3.config` merge lên `defconfig`)

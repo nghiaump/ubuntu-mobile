@@ -57,7 +57,7 @@ Không bịa thông tin phần cứng: dựa vào DTS, cover letter, log thực 
 - Workspace lớn: `/Volumes/pixelwork` (sparsebundle Case-sensitive APFS trên SSD exFAT `/Volumes/LIB/pixel-ubuntu/`), mount bằng `scripts/00-workspace.sh`. Repo này (scripts, notes) vẫn ở `~/Desktop/pixel`.
 
 ## Trạng thái (cập nhật 2026-11-13, hết Pha 4)
-- Ubuntu 24.04 chạy từ **boot_b** (kernel 7.4-rc2 #8 + panel v3 + patch 0001–0005: TEXT_OFFSET, cảm ứng, pin, loa, q6asm) và **userdata** (ext4 LABEL=pixelroot).
+- Ubuntu 24.04 chạy từ **boot_b** (kernel 7.4-rc2 **#10** + DTB 0013, panel v3 + patch 0001–0014: TEXT_OFFSET, cảm ứng, pin, loa, q6asm, max1720x, giới hạn/sạc nhanh, DT camera+micro, **USB PD 9 V**) và **userdata** (ext4 LABEL=pixelroot). Micro: thu ra toàn 0 (chưa xong); camera: IMX355 trước ở 0x10, chưa có ảnh.
 - A/B: Ubuntu phải đánh dấu slot thành công (`qbootctl.service`), nếu không sau 3 lần boot ABL rơi về Android ("Cannot load Android system" — KHÔNG factory reset; `fastboot --set-active=b`). RUNBOOK §6.5.
 - Truy cập: `ssh -o UserKnownHostsFile=.ssh_known_hosts ubuntu@172.16.42.1` (USB) hoặc qua Wi-Fi; dự phòng IPv6
   `fe80::ff:fe3a:2%enX`; serial USB tự đăng nhập (`/dev/cu.usbmodem*`, cửa sau debug).

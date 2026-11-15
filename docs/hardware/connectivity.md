@@ -28,8 +28,20 @@ pwrseq-qcom-wcn (WCN3990 PMU) ── ath10k_snoc ── chờ dịch vụ QMI "W
 | Node | `&uart6` → `bluetooth { compatible = "qcom,wcn3990-bt"; max-speed = <3200000>; }` |
 | Driver | `drivers/bluetooth/hci_qca.c` + `btqca.c` (`CONFIG_BT_HCIUART=m`, `BT_HCIUART_QCA=y`, cần `SERIAL_DEV_BUS=y`) |
 | Firmware | `qca/crbtfw21.tlv`, `qca/crnv21.bin` (linux-firmware; bản riêng máy lưu ở `firmware/device-extra/` để so sánh) |
-| Đo được | "QCA controller version 0x02140201", "QCA setup on UART is completed"; `hci0` BD `39:90:21:64:07:00` (địa chỉ mặc định, chưa cấu hình) |
-| Trạng thái | Firmware OK; chưa thử ghép đôi thiết bị |
+| Đo được | "QCA controller version 0x02140201", "QCA setup on UART is completed" |
+| Trạng thái | ✅ (2026-11-15) — controller lên, BlueZ thấy (`Powered: yes`), quét thấy thiết bị xung quanh. Ghép đôi: dùng GNOME Settings → Bluetooth |
+
+### Vấn đề "No default controller available" và cách sửa
+- Mainline để WCN3990 ở trạng thái **Unconfigured controller — missing options: public-address** (`btmgmt config`): ABL không truyền
+  địa chỉ BT (không có `androidboot.btmacaddr`, DT `local-bd-address` = 0). BlueZ bỏ qua controller unconfigured → GNOME không có Bluetooth.
+- Địa chỉ gốc của máy nằm trong phân vùng `persist` của Android — **không đụng** (luật an toàn).
+- Sửa: **`pixel-bt-addr.service`** (overlay) → `/usr/local/sbin/pixel-bt-addr.sh`: chờ `hci0`, nếu thiếu địa chỉ thì
+  `btmgmt --index 0 public-addr <địa chỉ>`. Địa chỉ **ổn định, duy nhất theo máy**: `sha256("pixel3xl-bt-" + androidboot.serialno)` 6 byte đầu,
+  bit locally-administered = 1, multicast = 0 (giống MAC Wi-Fi "stable"). Ghi đè: `BDADDR=…` trong `/etc/default/pixel-bt-addr`.
+- Bẫy `btmgmt` (bluez 5.72, bt_shell) trong dịch vụ: stdin `/dev/null` → thoát ngay **trước khi** có phản hồi (không in gì, tưởng "đã cấu hình");
+  không stdin → chờ mãi. Dùng `sleep 2 | timeout 5 btmgmt …`.
+- Kiểm chứng: `rmmod hci_uart && modprobe hci_uart` (controller về unconfigured) → `systemctl restart pixel-bt-addr` → "Set Public Address complete" → `Powered: yes`.
+- Lựa chọn khác (chưa làm): đặt `local-bd-address` trong DT (cần build/flash DTB).
 
 ## Modem & DSP (remoteproc)
 | Lõi | Node | Driver | Firmware (`qcom/sdm845/Google/blueline/`) | Vùng nhớ |

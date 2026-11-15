@@ -26,7 +26,7 @@ Bảng 14 overlay trong `dtbo.img` gốc: `archive/*/stock/dtbo-index.txt` (B1 =
 | Cảm ứng | Samsung **S6SY761** | `s6sy761` | ✅ (patch DT riêng) | [display](display-touch-gpu.md) |
 | GPU | Adreno 630 | `msm` (freedreno) | ✅ firmware nạp | [display](display-touch-gpu.md) |
 | Wi-Fi | **WCN3990** (ath10k SNOC) | `ath10k_snoc` | ✅ | [connectivity](connectivity.md) |
-| Bluetooth | WCN3990 (UART6) | `hci_uart`/`btqca` | ✅ firmware nạp (chưa thử ghép đôi) | [connectivity](connectivity.md) |
+| Bluetooth | WCN3990 (UART6) | `hci_uart`/`btqca` | ✅ (cần `pixel-bt-addr.service` gán địa chỉ) | [connectivity](connectivity.md) |
 | Modem / DSP | MPSS, ADSP, CDSP | `qcom_q6v5_mss/pas` | ✅ chạy (chưa có dữ liệu di động) | [connectivity](connectivity.md) |
 | Sạc | **PMI8998** (SMB2) | `qcom_smbx` + RRADC | ✅ `Charging` (500 mA từ cổng Mac) | [power](power-battery.md) |
 | % pin | **Maxim MAX1720x** @0x36 | `max1720x_battery` | ✅ (patch 0003, kernel #7) — 99 %, pin còn ~85 % dung lượng | [power](power-battery.md) |
