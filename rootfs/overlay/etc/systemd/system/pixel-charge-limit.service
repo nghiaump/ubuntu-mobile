@@ -1,0 +1,13 @@
+[Unit]
+Description=Pixel 3 XL: giới hạn sạc + sạc nhanh + Defender (/etc/default/pixel-charge-limit)
+After=systemd-modules-load.service
+
+[Service]
+ExecStart=/usr/local/sbin/pixel-charge-limit.sh
+# AN TOÀN: Defender có thể đang ngắt nguồn USB vào (máy chạy pin) — dừng/crash dịch vụ thì luôn cấp lại
+ExecStopPost=-/bin/sh -c 'echo Charging > /sys/class/power_supply/pmi8998-charger/status'
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

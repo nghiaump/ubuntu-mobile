@@ -1,0 +1,10 @@
+[Unit]
+Description=Pixel 3 XL: ghi trạng thái điện năng mỗi 2 phút
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

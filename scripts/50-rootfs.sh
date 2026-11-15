@@ -90,7 +90,7 @@ install -d "$MNT/boot/pixel"
 cp /work/out/kernel/Image.gz /work/out/kernel/sdm845-google-crosshatch.dtb /work/out/kernel/config "$MNT/boot/pixel/"
 
 echo "== dịch vụ"
-in_chroot systemctl enable usb-gadget.service pixel-firstboot.service pixel-sshkeys.service serial-getty@ttyGS0.service \
+in_chroot systemctl enable usb-gadget.service pixel-firstboot.service pixel-sshkeys.service serial-getty@ttyGS0.service pixel-charge-limit.service pixel-power-log.timer pixel-bt-addr.service \
   NetworkManager.service ssh.service systemd-timesyncd.service >/dev/null 2>&1
 for s in rmtfs tqftpserv; do
   in_chroot systemctl enable "$s.service" >/dev/null 2>&1 && echo "   enable $s" || echo "   !! không có $s.service"

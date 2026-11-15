@@ -1,0 +1,6 @@
+[Unit]
+Description=Pixel 3 XL: ghi trạng thái pin/sạc/nhiệt (CSV)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pixel-power-log.sh

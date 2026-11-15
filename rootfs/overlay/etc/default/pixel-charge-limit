@@ -1,0 +1,19 @@
+# Quản lý sạc (pixel-charge-limit.service). Đổi xong: sudo systemctl restart pixel-charge-limit
+# Tài liệu: docs/hardware/power-battery.md
+# Giới hạn sạc: ENABLE=0 để sạc đầy 100%
+ENABLE=1
+STOP=90
+START=85
+# Sạc nhanh theo bảng Google (cần kernel có patch 0009): FAST=0 để giữ 1 A
+FAST=1
+FAST_MAX_MA=3000
+# Defender (giống Battery Defender của Google): pin >= DEFEND_STOP% và nóng >= DEFEND_TEMP °C liên tục DEFEND_MINUTES phút
+# -> xả về DEFEND_STOP% (ngắt nguồn USB vào) và giữ DEFEND_START-DEFEND_STOP%; thoát khi nguội <= DEFEND_RELEASE_TEMP °C
+# liên tục DEFEND_RELEASE_MINUTES phút hoặc rút sạc. DEFEND=0 để tắt. (Google: >= 4.27 V + >= 35 °C trong 6 giờ)
+DEFEND=1
+DEFEND_TEMP=35
+DEFEND_MINUTES=60
+DEFEND_STOP=80
+DEFEND_START=75
+DEFEND_RELEASE_TEMP=32
+DEFEND_RELEASE_MINUTES=30
