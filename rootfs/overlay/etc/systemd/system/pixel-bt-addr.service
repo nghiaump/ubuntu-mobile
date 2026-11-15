@@ -1,0 +1,12 @@
+[Unit]
+Description=Pixel 3 XL: gán địa chỉ Bluetooth cho WCN3990 (controller unconfigured)
+After=systemd-modules-load.service
+Before=bluetooth.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/pixel-bt-addr.sh
+
+[Install]
+WantedBy=bluetooth.target multi-user.target
