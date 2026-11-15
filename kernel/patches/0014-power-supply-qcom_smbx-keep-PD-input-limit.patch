@@ -1,0 +1,47 @@
+From 06023e96763cc6c8ff4d5a5cf6bf28894f13242e Mon Sep 17 00:00:00 2001
+From: pixel3 port <pixel3@localhost>
+Date: Sat, 14 Nov 2026 12:42:33 +0700
+Subject: [PATCH] power: supply: qcom_smbx: keep the PD input limit on
+ high-voltage contracts
+
+The delayed status work (1.5 s after plug-in) re-applies the BC1.2/Rp
+input current limit. With a USB PD contract the Type-C driver has already
+raised VBUS and set the limit for that contract; overriding it with the
+5 V Rp current (3 A) exceeds e.g. a 9 V/2 A contract. Skip the update
+while USBIN is above 6 V.
+
+Signed-off-by: pixel3 port <pixel3@localhost>
+---
+ drivers/power/supply/qcom_smbx.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/drivers/power/supply/qcom_smbx.c b/drivers/power/supply/qcom_smbx.c
+index ff815aa79..34afd08c0 100644
+--- a/drivers/power/supply/qcom_smbx.c
++++ b/drivers/power/supply/qcom_smbx.c
+@@ -574,6 +574,22 @@ static void smb_status_change_work(struct work_struct *work)
+ 	if (!usb_online)
+ 		return;
+ 
++	/*
++	 * A USB PD contract above 5 V (negotiated by the Type-C/PD driver,
++	 * which also programs the input limit) must not be overridden with
++	 * the BC1.2 / Type-C Rp current, which is only valid at 5 V.
++	 */
++	if (chip->usb_in_v_chan) {
++		int uv;
++
++		/* rradc usbin_v is processed in microvolts */
++		if (!iio_read_channel_processed(chip->usb_in_v_chan, &uv) &&
++		    uv > 6000000) {
++			dev_info(chip->dev, "USBIN %d uV: PD contract, keep input limit\n", uv);
++			return;
++		}
++	}
++
+ 	for (count = 0; count < 3; count++) {
+ 		dev_dbg(chip->dev, "get charger type retry %d\n", count);
+ 		rc = smb_apsd_get_charger_type(chip, &charger_type);
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,37 @@
+From 3b86b1a300ba006f3b2c6518443686491a84fdae Mon Sep 17 00:00:00 2001
+From: pixel3 port <pixel3@localhost>
+Date: Fri, 13 Nov 2026 23:39:31 +0700
+Subject: [PATCH] power: supply: max1720x: clear alert status bits instead of
+ setting them
+
+The MAX1720x Status register alert bits (Vmn, Vmx, Tmn, Tmx) are sticky
+and are cleared by writing 0. max172xx_battery_health() tries to clear
+them after reporting, but uses regmap_set_bits(), which writes 1 and so
+latches all four alerts. Since Status is non-zero on any 1% SoC change
+(dSOCi), the first health read sets Vmn and every later read reports
+POWER_SUPPLY_HEALTH_DEAD on a healthy battery (seen on Pixel 3 XL:
+Status 0x3380, 4.32 V, 31 C, alert thresholds disabled).
+
+Use regmap_clear_bits() so the bits are actually cleared.
+
+Signed-off-by: pixel3 port <pixel3@localhost>
+---
+ drivers/power/supply/max1720x_battery.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/power/supply/max1720x_battery.c b/drivers/power/supply/max1720x_battery.c
+index 4686b871b..7edb13803 100644
+--- a/drivers/power/supply/max1720x_battery.c
++++ b/drivers/power/supply/max1720x_battery.c
+@@ -346,7 +346,7 @@ static int max172xx_battery_health(struct max1720x_device_info *info,
+ 
+ 	/* Clear events which are not self-clearing to detect next events */
+ 	if (status > 0 && status != MAX172XX_STATUS_IMX) {
+-		ret = regmap_set_bits(info->regmap, MAX172XX_STATUS,
++		ret = regmap_clear_bits(info->regmap, MAX172XX_STATUS,
+ 				      MAX172XX_STATUS_VMN |
+ 				      MAX172XX_STATUS_VMX |
+ 				      MAX172XX_STATUS_TMN |
+-- 
+2.54.0 (Apple Git-157)
+

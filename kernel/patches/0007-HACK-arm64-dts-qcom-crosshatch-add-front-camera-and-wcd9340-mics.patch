@@ -1,0 +1,177 @@
+From f8d3e627a4e816f6c67a7b2a8f24fe7c07017492 Mon Sep 17 00:00:00 2001
+From: pixel3 port <pixel3@localhost>
+Date: Fri, 13 Nov 2026 23:43:10 +0700
+Subject: [PATCH] HACK: arm64: dts: qcom: sdm845-google-crosshatch: Add front
+ camera and WCD9340 mics
+
+Front camera: Sony IMX355 on CCI1/CSIPHY2 (stock dtbo cam-sensor@1).
+Microphones: WCD9340 over SLIMbus, SLIMBUS_0_TX capture on MultiMedia2.
+Values from the stock C1 DVT1.1 dtbo; AVDD voltage and the CSI link
+configuration follow the Pixel 3a (sdm670-google-sargo) DT and are not
+verified against Google sources.
+
+Signed-off-by: pixel3 port <pixel3@localhost>
+---
+ .../dts/qcom/sdm845-google-crosshatch.dts     | 149 ++++++++++++++++++
+ 1 file changed, 149 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts b/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
+index c83c7cae5..a5c162f4e 100644
+--- a/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
++++ b/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
+@@ -299,3 +299,152 @@ irq-pins {
+ 		};
+ 	};
+ };
++
++/*
++ * Front camera (stock dtbo C1, qcom,cam-sensor@1): Sony IMX355 @0x1a on CCI master 1,
++ * CSIPHY2, MCLK2 (gpio15) 24 MHz, reset gpio21, gpio8 enables the AVDD LDO (fed from BOB),
++ * vdig = pm8998 s3 (1.352 V), vio = pm8998 lvs1.
++ * HACK: AVDD voltage and the 4-lane/360 MHz link are taken from the Pixel 3a (sdm670) DT,
++ * not from Google sources.
++ */
++#include <dt-bindings/clock/qcom,camcc-sdm845.h>
++#include <dt-bindings/media/video-interface-devices.h>
++
++/ {
++	cam_front_avdd: cam-front-avdd-regulator {
++		compatible = "regulator-fixed";
++		regulator-name = "cam_front_avdd";
++		regulator-min-microvolt = <2800000>;
++		regulator-max-microvolt = <2800000>;
++		startup-delay-us = <1000>;
++
++		gpios = <&tlmm 8 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		vin-supply = <&vreg_bob>;
++
++		pinctrl-0 = <&cam_front_avdd_default>;
++		pinctrl-names = "default";
++	};
++};
++
++&apps_rsc {
++	regulators-0 {
++		vreg_lvs1a_1p8: lvs1 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <1800000>;
++		};
++	};
++};
++
++&camss {
++	vdda-phy-supply = <&vreg_l1a_0p875>;
++	vdda-pll-supply = <&vreg_l26a_1p2>;
++
++	status = "okay";
++
++	ports {
++		port@2 {
++			camss_endpoint2: endpoint {
++				data-lanes = <0 1 2 3>;
++				remote-endpoint = <&cam_front_endpoint>;
++			};
++		};
++	};
++};
++
++&cci_i2c1 {
++	camera@1a {
++		compatible = "sony,imx355";
++		reg = <0x1a>;
++
++		clocks = <&clock_camcc CAM_CC_MCLK2_CLK>;
++		assigned-clocks = <&clock_camcc CAM_CC_MCLK2_CLK>;
++		assigned-clock-rates = <24000000>;
++
++		reset-gpios = <&tlmm 21 GPIO_ACTIVE_LOW>;
++
++		avdd-supply = <&cam_front_avdd>;
++		dvdd-supply = <&vreg_s3a_1p35>;
++		dovdd-supply = <&vreg_lvs1a_1p8>;
++
++		pinctrl-0 = <&cam_mclk2_default>, <&cam_front_default>;
++		pinctrl-names = "default";
++
++		rotation = <270>;
++		orientation = <MEDIA_ORIENTATION_FRONT>;
++
++		port {
++			cam_front_endpoint: endpoint {
++				data-lanes = <1 2 3 4>;
++				link-frequencies = /bits/ 64 <360000000>;
++				remote-endpoint = <&camss_endpoint2>;
++			};
++		};
++	};
++};
++
++&tlmm {
++	cam_front_default: cam-front-default-state {
++		pins = "gpio21";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	cam_front_avdd_default: cam-front-avdd-default-state {
++		pins = "gpio8";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++};
++
++/*
++ * Microphones: 3 digital mics on the WCD9340 (stock routing: DMIC0/MIC BIAS1,
++ * DMIC3/MIC BIAS3, DMIC4/MIC BIAS4) over SLIMbus. Codec: reset gpio64, irq gpio54,
++ * MCLK from LN_BB_CLK2, all supplies pm8998 s4 1.8 V. No WSA speakers on SoundWire.
++ */
++#include "sdm845-wcd9340.dtsi"
++
++&wcd9340 {
++	reset-gpios = <&tlmm 64 GPIO_ACTIVE_HIGH>;
++	vdd-buck-supply = <&vreg_s4a_1p8>;
++	vdd-buck-sido-supply = <&vreg_s4a_1p8>;
++	vdd-tx-supply = <&vreg_s4a_1p8>;
++	vdd-rx-supply = <&vreg_s4a_1p8>;
++	vdd-io-supply = <&vreg_s4a_1p8>;
++};
++
++&swm {
++	status = "disabled";
++};
++
++&q6asmdai {
++	dai@1 {
++		reg = <MSM_FRONTEND_DAI_MULTIMEDIA2>;
++	};
++};
++
++&sound {
++	mm2-dai-link {
++		link-name = "MultiMedia2";
++		cpu {
++			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA2>;
++		};
++	};
++
++	slimcap-dai-link {
++		link-name = "SLIM Capture";
++		cpu {
++			sound-dai = <&q6afedai SLIMBUS_0_TX>;
++		};
++
++		platform {
++			sound-dai = <&q6routing>;
++		};
++
++		codec {
++			sound-dai = <&wcd9340 1>;
++		};
++	};
++};
+-- 
+2.54.0 (Apple Git-157)
+

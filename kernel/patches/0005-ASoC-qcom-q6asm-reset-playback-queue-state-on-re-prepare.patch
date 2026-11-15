@@ -14,7 +14,7 @@ RUNNING state.
 Reset queue_ptr in prepare and reset the q6asm buffer index/hw pointer on
 CMD_CLOSE as well as on CMD_FLUSH.
 
-Signed-off-by: nghiaump <nghiaump@gmail.com>
+Signed-off-by: pixel3 port <pixel3@localhost>
 ---
  sound/soc/qcom/qdsp6/q6asm-dai.c | 7 +++++--
  sound/soc/qcom/qdsp6/q6asm.c     | 4 +++-

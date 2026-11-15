@@ -1,0 +1,47 @@
+From 909107d9c6bcea7b811bab364ac421bcf2481633 Mon Sep 17 00:00:00 2001
+From: pixel3 port <pixel3@localhost>
+Date: Sat, 14 Nov 2026 11:46:06 +0700
+Subject: [PATCH 2/2] HACK: arm64: dts: qcom: sdm845-google-crosshatch: charge
+ current cap, mic routing
+
+- battery: constant-charge-current-max-microamp = 3 A (stock
+  google,chg-cc-limits allow 1.0C = 3.43 A at 20-42 C below 4.2 V).
+- sound: DMIC0/3/4 powered from MIC BIAS1/3/4 as in the stock routing.
+
+Signed-off-by: pixel3 port <pixel3@localhost>
+---
+ arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts b/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
+index a5c162f4e..8c1da48c5 100644
+--- a/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
++++ b/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
+@@ -17,6 +17,11 @@ &battery {
+ 	charge-full-design-microamp-hours = <3480000>;
+ 	voltage-min-design-microvolt = <3600000>;
+ 	voltage-max-design-microvolt = <4400000>;
++	/*
++	 * Stock google,chg-cc-limits allow up to 1.0C (3.43 A) between 20 and
++	 * 42 C below 4.2 V; cap the charger at 3 A, userspace steps it down.
++	 */
++	constant-charge-current-max-microamp = <3000000>;
+ };
+ 
+ &framebuffer0 {
+@@ -426,6 +431,12 @@ dai@1 {
+ };
+ 
+ &sound {
++	/* stock: DMIC0 <- MIC BIAS1, DMIC3 <- MIC BIAS3, DMIC4 <- MIC BIAS4 */
++	audio-routing = "RX_BIAS", "MCLK",
++			"DMIC0", "MIC BIAS1",
++			"DMIC3", "MIC BIAS3",
++			"DMIC4", "MIC BIAS4";
++
+ 	mm2-dai-link {
+ 		link-name = "MultiMedia2";
+ 		cpu {
+-- 
+2.54.0 (Apple Git-157)
+

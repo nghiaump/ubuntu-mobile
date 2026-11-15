@@ -1,0 +1,89 @@
+From 4d3486acc4a5660b81d2cbaf8686ce08c9cad992 Mon Sep 17 00:00:00 2001
+From: pixel3 port <pixel3@localhost>
+Date: Sat, 14 Nov 2026 00:06:34 +0700
+Subject: [PATCH] power: supply: qcom_smbx: add charge_behaviour
+ (auto/inhibit-charge)
+
+Expose the CHARGING_ENABLE_CMD bit as POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR so
+userspace can stop charging the battery (e.g. hold it at 80% on a device
+that stays plugged in) while USBIN keeps powering the system. The existing
+writable STATUS property suspends the whole input instead, which makes the
+system run from the battery.
+
+Signed-off-by: pixel3 port <pixel3@localhost>
+---
+ drivers/power/supply/qcom_smbx.c | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/drivers/power/supply/qcom_smbx.c b/drivers/power/supply/qcom_smbx.c
+index 8a2f635a6..8c18df3f3 100644
+--- a/drivers/power/supply/qcom_smbx.c
++++ b/drivers/power/supply/qcom_smbx.c
+@@ -417,6 +417,7 @@ static enum power_supply_property smb_properties[] = {
+ 	POWER_SUPPLY_PROP_HEALTH,
+ 	POWER_SUPPLY_PROP_ONLINE,
+ 	POWER_SUPPLY_PROP_USB_TYPE,
++	POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR,
+ };
+ 
+ static int smb_get_prop_usb_online(struct smb_chip *chip, int *val)
+@@ -682,6 +683,17 @@ static int smb_get_property(struct power_supply *psy,
+ 		return smb_get_prop_health(chip, &val->intval);
+ 	case POWER_SUPPLY_PROP_USB_TYPE:
+ 		return smb_apsd_get_charger_type(chip, &val->intval);
++	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR: {
++		unsigned int cmd;
++		int rc = regmap_read(chip->regmap, chip->base + CHARGING_ENABLE_CMD, &cmd);
++
++		if (rc < 0)
++			return rc;
++		val->intval = (cmd & CHARGING_ENABLE_CMD_BIT) ?
++			      POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO :
++			      POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE;
++		return 0;
++	}
+ 	default:
+ 		dev_err(chip->dev, "invalid property: %d\n", psp);
+ 		return -EINVAL;
+@@ -700,6 +712,21 @@ static int smb_set_property(struct power_supply *psy,
+ 					  USBIN_SUSPEND_BIT, !val->intval);
+ 	case POWER_SUPPLY_PROP_CURRENT_MAX:
+ 		return smb_set_current_limit(chip, val->intval);
++	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR:
++		/*
++		 * Inhibit only stops charging the battery: USBIN keeps powering
++		 * the system (unlike STATUS, which suspends the input).
++		 */
++		switch (val->intval) {
++		case POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO:
++			return regmap_update_bits(chip->regmap, chip->base + CHARGING_ENABLE_CMD,
++						  CHARGING_ENABLE_CMD_BIT, CHARGING_ENABLE_CMD_BIT);
++		case POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE:
++			return regmap_update_bits(chip->regmap, chip->base + CHARGING_ENABLE_CMD,
++						  CHARGING_ENABLE_CMD_BIT, 0);
++		default:
++			return -EINVAL;
++		}
+ 	default:
+ 		dev_err(chip->dev, "No setter for property: %d\n", psp);
+ 		return -EINVAL;
+@@ -712,6 +739,7 @@ static int smb_property_is_writable(struct power_supply *psy,
+ 	switch (psp) {
+ 	case POWER_SUPPLY_PROP_STATUS:
+ 	case POWER_SUPPLY_PROP_CURRENT_MAX:
++	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR:
+ 		return 1;
+ 	default:
+ 		return 0;
+@@ -784,6 +812,8 @@ static const struct power_supply_desc smb_psy_desc = {
+ 		     BIT(POWER_SUPPLY_USB_TYPE_CDP) |
+ 		     BIT(POWER_SUPPLY_USB_TYPE_DCP) |
+ 		     BIT(POWER_SUPPLY_USB_TYPE_UNKNOWN),
++	.charge_behaviours = BIT(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO) |
++			     BIT(POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE),
+ 	.properties = smb_properties,
+ 	.num_properties = ARRAY_SIZE(smb_properties),
+ 	.get_property = smb_get_property,
+-- 
+2.54.0 (Apple Git-157)
+

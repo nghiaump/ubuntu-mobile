@@ -1,0 +1,436 @@
+From dfc41b613c75ac3163cbf158e7dc8539fccdcb2d Mon Sep 17 00:00:00 2001
+From: pixel3 port <pixel3@localhost>
+Date: Sat, 14 Nov 2026 12:35:03 +0700
+Subject: [PATCH 1/2] usb: typec: qcom-pmic-typec: add PMI8998 (SMB2) sink port
+ backend
+
+The PMI8998 has no TYPEC peripheral: CC detection is part of the USBIN
+block of the SMB2 charger and runs in hardware. Its PD PHY however is the
+same block as on PM8150B. Add a minimal sink-only port backend that
+reports the hardware CC state/orientation and VBUS to TCPM, routes the
+PD PHY to the active CC line (TYPEC_SPARE_CFG + VCONN_EN_ORIENTATION, as
+the vendor driver does on PD activation), keeps the port attached across
+VBUS drops (EXIT_SNK_BASED_ON_CC, needed for hard reset) and programs the
+charger input current limit / 5-9 V adapter allowance from the
+negotiated contract. Registers from the vendor smb-reg.h.
+
+Signed-off-by: pixel3 port <pixel3@localhost>
+---
+ drivers/usb/typec/tcpm/qcom/Makefile          |   1 +
+ drivers/usb/typec/tcpm/qcom/qcom_pmic_typec.c |  17 +-
+ drivers/usb/typec/tcpm/qcom/qcom_pmic_typec.h |   1 +
+ .../tcpm/qcom/qcom_pmic_typec_port_smb2.c     | 310 ++++++++++++++++++
+ .../tcpm/qcom/qcom_pmic_typec_port_smb2.h     |  14 +
+ 5 files changed, 341 insertions(+), 2 deletions(-)
+ create mode 100644 drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port_smb2.c
+ create mode 100644 drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port_smb2.h
+
+diff --git a/drivers/usb/typec/tcpm/qcom/Makefile b/drivers/usb/typec/tcpm/qcom/Makefile
+index cc23042b9..332dd5614 100644
+--- a/drivers/usb/typec/tcpm/qcom/Makefile
++++ b/drivers/usb/typec/tcpm/qcom/Makefile
+@@ -3,5 +3,6 @@
+ obj-$(CONFIG_TYPEC_QCOM_PMIC)		+= qcom_pmic_tcpm.o
+ qcom_pmic_tcpm-y			+= qcom_pmic_typec.o \
+ 					   qcom_pmic_typec_port.o \
++					   qcom_pmic_typec_port_smb2.o \
+ 					   qcom_pmic_typec_pdphy.o \
+ 					   qcom_pmic_typec_pdphy_stub.o \
+diff --git a/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec.c b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec.c
+index 58d1e6aae..84cf8d841 100644
+--- a/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec.c
++++ b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec.c
+@@ -17,10 +17,13 @@
+ #include "qcom_pmic_typec.h"
+ #include "qcom_pmic_typec_pdphy.h"
+ #include "qcom_pmic_typec_port.h"
++#include "qcom_pmic_typec_port_smb2.h"
+ 
+ struct pmic_typec_resources {
+ 	const struct pmic_typec_pdphy_resources	*pdphy_res;
+ 	const struct pmic_typec_port_resources	*port_res;
++	/* PMI8998: Type-C lives in the SMB2 charger, not a TYPEC peripheral */
++	bool					smb2_port;
+ };
+ 
+ static int qcom_pmic_typec_init(struct tcpc_dev *tcpc)
+@@ -60,8 +63,11 @@ static int qcom_pmic_typec_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = qcom_pmic_typec_port_probe(pdev, tcpm,
+-					 res->port_res, regmap, base);
++	if (res->smb2_port)
++		ret = qcom_pmic_typec_port_smb2_probe(pdev, tcpm, regmap, base);
++	else
++		ret = qcom_pmic_typec_port_probe(pdev, tcpm,
++						 res->port_res, regmap, base);
+ 	if (ret)
+ 		return ret;
+ 
+@@ -144,7 +150,14 @@ static const struct pmic_typec_resources pmi632_typec_res = {
+ 	.port_res = &pm8150b_port_res,
+ };
+ 
++static const struct pmic_typec_resources pmi8998_typec_res = {
++	/* same PD PHY block and interrupts as PM8150B */
++	.pdphy_res = &pm8150b_pdphy_res,
++	.smb2_port = true,
++};
++
+ static const struct of_device_id qcom_pmic_typec_table[] = {
++	{ .compatible = "qcom,pmi8998-typec", .data = &pmi8998_typec_res },
+ 	{ .compatible = "qcom,pm8150b-typec", .data = &pm8150b_typec_res },
+ 	{ .compatible = "qcom,pmi632-typec", .data = &pmi632_typec_res },
+ 	{ }
+diff --git a/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec.h b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec.h
+index 3c75820c9..b4c5b77c0 100644
+--- a/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec.h
++++ b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec.h
+@@ -12,6 +12,7 @@ struct pmic_typec {
+ 	struct tcpc_dev		tcpc;
+ 	struct pmic_typec_pdphy	*pmic_typec_pdphy;
+ 	struct pmic_typec_port	*pmic_typec_port;
++	struct pmic_typec_smb2_port *pmic_typec_port_smb2;
+ 
+ 	int (*pdphy_start)(struct pmic_typec *tcpm,
+ 			   struct tcpm_port *tcpm_port);
+diff --git a/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port_smb2.c b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port_smb2.c
+new file mode 100644
+index 000000000..64c28e4bb
+--- /dev/null
++++ b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port_smb2.c
+@@ -0,0 +1,310 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Type-C port backend for the PMI8998 (SMB2) charger, sink only.
++ *
++ * Unlike PM8150B/PMI632, the PMI8998 has no separate Type-C peripheral:
++ * CC detection lives in the USBIN block of the SMB2 charger and runs
++ * autonomously in hardware. This backend reports the hardware CC state to
++ * TCPM so that the PD PHY (shared with PM8150B) can negotiate a USB PD
++ * contract, and programs the charger input limits from that contract.
++ *
++ * Register layout from the vendor smb-reg.h (USBIN base 0x1300).
++ */
++
++#include <linux/delay.h>
++#include <linux/interrupt.h>
++#include <linux/kernel.h>
++#include <linux/mutex.h>
++#include <linux/platform_device.h>
++#include <linux/regmap.h>
++#include <linux/usb/tcpm.h>
++#include <linux/usb/typec.h>
++#include "qcom_pmic_typec.h"
++#include "qcom_pmic_typec_port_smb2.h"
++
++#define SMB2_TYPE_C_STATUS_1			0x0b
++#define  UFP_TYPEC_RDSTD			BIT(7)
++#define  UFP_TYPEC_RD1P5			BIT(6)
++#define  UFP_TYPEC_RD3P0			BIT(5)
++#define SMB2_TYPE_C_STATUS_4			0x0e
++#define  TYPEC_VBUS_STATUS			BIT(6)
++#define  TYPEC_DEBOUNCE_DONE			BIT(4)
++#define  CC_ORIENTATION				BIT(1)
++#define  CC_ATTACHED				BIT(0)
++#define SMB2_USBIN_ADAPTER_ALLOW_CFG		0x60
++#define  USBIN_ADAPTER_ALLOW_MASK		GENMASK(3, 0)
++#define  USBIN_ADAPTER_ALLOW_5V_TO_9V		8
++#define SMB2_TAPER_TIMER_SEL_CFG		0x64
++#define  TYPEC_SPARE_CFG			BIT(7)	/* s/w selects the PD CC line */
++#define SMB2_TYPE_C_INTRPT_ENB_SOFTWARE_CTRL	0x68
++#define  EXIT_SNK_BASED_ON_CC			BIT(7)
++#define  VCONN_EN_ORIENTATION			BIT(6)
++#define  UFP_EN_CMD				BIT(2)
++#define  DFP_EN_CMD				BIT(1)
++#define  TYPEC_DISABLE_CMD			BIT(0)
++#define SMB2_USBIN_CURRENT_LIMIT_CFG		0x70
++#define  USBIN_CURRENT_STEP_UA			25000
++#define  USBIN_CURRENT_MAX_UA			3000000
++
++struct pmic_typec_smb2_port {
++	struct device		*dev;
++	struct tcpm_port	*tcpm_port;
++	struct regmap		*regmap;
++	u32			base;
++	int			irq;
++	struct mutex		lock;	/* serialises register updates */
++};
++
++static int smb2_read(struct pmic_typec_smb2_port *port, u32 reg, unsigned int *val)
++{
++	return regmap_read(port->regmap, port->base + reg, val);
++}
++
++static int smb2_update(struct pmic_typec_smb2_port *port, u32 reg, u8 mask, u8 val)
++{
++	return regmap_update_bits(port->regmap, port->base + reg, mask, val);
++}
++
++static int qcom_smb2_port_get_vbus(struct tcpc_dev *tcpc)
++{
++	struct pmic_typec *tcpm = tcpc_to_tcpm(tcpc);
++	struct pmic_typec_smb2_port *port = tcpm->pmic_typec_port_smb2;
++	unsigned int stat;
++	int ret;
++
++	ret = smb2_read(port, SMB2_TYPE_C_STATUS_4, &stat);
++	if (ret)
++		return ret;
++
++	return !!(stat & TYPEC_VBUS_STATUS);
++}
++
++static int qcom_smb2_port_set_vbus(struct tcpc_dev *tcpc, bool on, bool sink)
++{
++	/* Sink only: VBUS is never sourced from this port */
++	return on ? -EOPNOTSUPP : 0;
++}
++
++static int qcom_smb2_port_get_cc(struct tcpc_dev *tcpc,
++				 enum typec_cc_status *cc1,
++				 enum typec_cc_status *cc2)
++{
++	struct pmic_typec *tcpm = tcpc_to_tcpm(tcpc);
++	struct pmic_typec_smb2_port *port = tcpm->pmic_typec_port_smb2;
++	enum typec_cc_status rp = TYPEC_CC_OPEN;
++	unsigned int stat1, stat4;
++	int ret;
++
++	ret = smb2_read(port, SMB2_TYPE_C_STATUS_4, &stat4);
++	if (!ret)
++		ret = smb2_read(port, SMB2_TYPE_C_STATUS_1, &stat1);
++	if (ret)
++		return ret;
++
++	*cc1 = TYPEC_CC_OPEN;
++	*cc2 = TYPEC_CC_OPEN;
++
++	if (!(stat4 & CC_ATTACHED))
++		goto out;
++
++	if (stat1 & UFP_TYPEC_RD3P0)
++		rp = TYPEC_CC_RP_3_0;
++	else if (stat1 & UFP_TYPEC_RD1P5)
++		rp = TYPEC_CC_RP_1_5;
++	else if (stat1 & UFP_TYPEC_RDSTD)
++		rp = TYPEC_CC_RP_DEF;
++
++	if (stat4 & CC_ORIENTATION)
++		*cc2 = rp;
++	else
++		*cc1 = rp;
++out:
++	dev_dbg(port->dev, "get_cc: status1 0x%02x status4 0x%02x -> cc1 %d cc2 %d\n",
++		stat1, stat4, *cc1, *cc2);
++	return 0;
++}
++
++static int qcom_smb2_port_set_cc(struct tcpc_dev *tcpc, enum typec_cc_status cc)
++{
++	struct pmic_typec *tcpm = tcpc_to_tcpm(tcpc);
++	struct pmic_typec_smb2_port *port = tcpm->pmic_typec_port_smb2;
++	u8 cmd;
++	int ret;
++
++	switch (cc) {
++	case TYPEC_CC_RD:
++		cmd = UFP_EN_CMD;
++		break;
++	case TYPEC_CC_OPEN:
++		/* Error recovery: remove Rd so the source drops and re-applies VBUS */
++		cmd = TYPEC_DISABLE_CMD;
++		break;
++	default:
++		/* Rp (source) is not supported on this sink-only port */
++		return -EOPNOTSUPP;
++	}
++
++	mutex_lock(&port->lock);
++	ret = smb2_update(port, SMB2_TYPE_C_INTRPT_ENB_SOFTWARE_CTRL,
++			  UFP_EN_CMD | DFP_EN_CMD | TYPEC_DISABLE_CMD, cmd);
++	mutex_unlock(&port->lock);
++
++	dev_dbg(port->dev, "set_cc %d -> cmd 0x%02x (%d)\n", cc, cmd, ret);
++	return ret;
++}
++
++static int qcom_smb2_port_set_polarity(struct tcpc_dev *tcpc,
++				       enum typec_cc_polarity polarity)
++{
++	struct pmic_typec *tcpm = tcpc_to_tcpm(tcpc);
++	struct pmic_typec_smb2_port *port = tcpm->pmic_typec_port_smb2;
++	int ret;
++
++	/*
++	 * As in the vendor driver on PD activation: VCONN_EN_ORIENTATION picks
++	 * the CC line used by the PD PHY once TYPEC_SPARE_CFG hands the CC
++	 * selection to software (set = CC1, clear = CC2).
++	 */
++	mutex_lock(&port->lock);
++	ret = smb2_update(port, SMB2_TYPE_C_INTRPT_ENB_SOFTWARE_CTRL,
++			  VCONN_EN_ORIENTATION,
++			  polarity == TYPEC_POLARITY_CC2 ? 0 : VCONN_EN_ORIENTATION);
++	if (!ret)
++		ret = smb2_update(port, SMB2_TAPER_TIMER_SEL_CFG,
++				  TYPEC_SPARE_CFG, TYPEC_SPARE_CFG);
++	mutex_unlock(&port->lock);
++
++	dev_dbg(port->dev, "set_polarity CC%d (%d)\n",
++		polarity == TYPEC_POLARITY_CC2 ? 2 : 1, ret);
++	return ret;
++}
++
++static int qcom_smb2_port_set_vconn(struct tcpc_dev *tcpc, bool on)
++{
++	return on ? -EOPNOTSUPP : 0;
++}
++
++static int qcom_smb2_port_start_toggling(struct tcpc_dev *tcpc,
++					 enum typec_port_type port_type,
++					 enum typec_cc_status cc)
++{
++	/* The hardware state machine attaches by itself; just present Rd */
++	return qcom_smb2_port_set_cc(tcpc, TYPEC_CC_RD);
++}
++
++static int qcom_smb2_port_set_current_limit(struct tcpc_dev *tcpc, u32 max_ma, u32 mv)
++{
++	struct pmic_typec *tcpm = tcpc_to_tcpm(tcpc);
++	struct pmic_typec_smb2_port *port = tcpm->pmic_typec_port_smb2;
++	unsigned int ua;
++	int ret;
++
++	/* Detach reports 0: leave the input limit to the charger driver */
++	if (!max_ma)
++		return 0;
++
++	ua = min_t(unsigned int, max_ma * 1000, USBIN_CURRENT_MAX_UA);
++
++	mutex_lock(&port->lock);
++	/* Allow the adapter to move between 5 V and 9 V (PD fixed PDOs) */
++	ret = smb2_update(port, SMB2_USBIN_ADAPTER_ALLOW_CFG,
++			  USBIN_ADAPTER_ALLOW_MASK, USBIN_ADAPTER_ALLOW_5V_TO_9V);
++	if (!ret)
++		ret = regmap_write(port->regmap, port->base + SMB2_USBIN_CURRENT_LIMIT_CFG,
++				   ua / USBIN_CURRENT_STEP_UA);
++	mutex_unlock(&port->lock);
++
++	dev_info(port->dev, "input limit %u mA at %u mV (%d)\n", ua / 1000, mv, ret);
++	return ret;
++}
++
++static irqreturn_t qcom_smb2_port_isr(int irq, void *dev_id)
++{
++	struct pmic_typec_smb2_port *port = dev_id;
++
++	tcpm_cc_change(port->tcpm_port);
++	tcpm_vbus_change(port->tcpm_port);
++
++	return IRQ_HANDLED;
++}
++
++static int qcom_smb2_port_start(struct pmic_typec *tcpm, struct tcpm_port *tcpm_port)
++{
++	struct pmic_typec_smb2_port *port = tcpm->pmic_typec_port_smb2;
++	int ret;
++
++	port->tcpm_port = tcpm_port;
++
++	/*
++	 * Detach on CC only, not on VBUS: VBUS drops during a PD hard reset
++	 * (vendor driver sets this while in hard reset).
++	 */
++	ret = smb2_update(port, SMB2_TYPE_C_INTRPT_ENB_SOFTWARE_CTRL,
++			  EXIT_SNK_BASED_ON_CC, EXIT_SNK_BASED_ON_CC);
++	if (ret)
++		return ret;
++
++	enable_irq(port->irq);
++
++	/* Report the current state (cable may already be attached) */
++	tcpm_cc_change(port->tcpm_port);
++	tcpm_vbus_change(port->tcpm_port);
++
++	return 0;
++}
++
++static void qcom_smb2_port_stop(struct pmic_typec *tcpm)
++{
++	struct pmic_typec_smb2_port *port = tcpm->pmic_typec_port_smb2;
++
++	disable_irq(port->irq);
++
++	/* Hand CC selection back to the hardware, keep the sink role */
++	smb2_update(port, SMB2_TAPER_TIMER_SEL_CFG, TYPEC_SPARE_CFG, 0);
++	smb2_update(port, SMB2_TYPE_C_INTRPT_ENB_SOFTWARE_CTRL,
++		    EXIT_SNK_BASED_ON_CC | UFP_EN_CMD | DFP_EN_CMD | TYPEC_DISABLE_CMD, 0);
++}
++
++int qcom_pmic_typec_port_smb2_probe(struct platform_device *pdev,
++				    struct pmic_typec *tcpm,
++				    struct regmap *regmap, u32 base)
++{
++	struct device *dev = &pdev->dev;
++	struct pmic_typec_smb2_port *port;
++	int ret;
++
++	port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
++	if (!port)
++		return -ENOMEM;
++
++	port->dev = dev;
++	port->regmap = regmap;
++	port->base = base;
++	mutex_init(&port->lock);
++
++	port->irq = platform_get_irq_byname(pdev, "type-c-change");
++	if (port->irq < 0)
++		return port->irq;
++
++	ret = devm_request_threaded_irq(dev, port->irq, NULL, qcom_smb2_port_isr,
++					IRQF_ONESHOT | IRQF_NO_AUTOEN,
++					"type-c-change", port);
++	if (ret)
++		return ret;
++
++	tcpm->pmic_typec_port_smb2 = port;
++
++	tcpm->tcpc.get_vbus = qcom_smb2_port_get_vbus;
++	tcpm->tcpc.set_vbus = qcom_smb2_port_set_vbus;
++	tcpm->tcpc.set_cc = qcom_smb2_port_set_cc;
++	tcpm->tcpc.get_cc = qcom_smb2_port_get_cc;
++	tcpm->tcpc.set_polarity = qcom_smb2_port_set_polarity;
++	tcpm->tcpc.set_vconn = qcom_smb2_port_set_vconn;
++	tcpm->tcpc.start_toggling = qcom_smb2_port_start_toggling;
++	tcpm->tcpc.set_current_limit = qcom_smb2_port_set_current_limit;
++
++	tcpm->port_start = qcom_smb2_port_start;
++	tcpm->port_stop = qcom_smb2_port_stop;
++
++	return 0;
++}
+diff --git a/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port_smb2.h b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port_smb2.h
+new file mode 100644
+index 000000000..bf165a8d2
+--- /dev/null
++++ b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_port_smb2.h
+@@ -0,0 +1,14 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++#ifndef __QCOM_PMIC_TYPEC_PORT_SMB2_H__
++#define __QCOM_PMIC_TYPEC_PORT_SMB2_H__
++
++#include <linux/platform_device.h>
++#include <linux/regmap.h>
++
++struct pmic_typec;
++
++int qcom_pmic_typec_port_smb2_probe(struct platform_device *pdev,
++				    struct pmic_typec *tcpm,
++				    struct regmap *regmap, u32 base);
++
++#endif
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,144 @@
+From a2ab31aef902f3ab86a43ff5de5a615cab200bfb Mon Sep 17 00:00:00 2001
+From: pixel3 port <pixel3@localhost>
+Date: Sat, 14 Nov 2026 11:59:34 +0700
+Subject: [PATCH] HACK: arm64: dts: qcom: sdm845-google-crosshatch: MCLK for
+ capture, both front cameras
+
+- sound: route MCLK to AIF1 CAP; without it the WCD9340 runs the TX path
+  with no master clock and SLIM capture returns digital silence.
+- camera: describe both front sensors (stock cam-sensor@1: reset gpio21,
+  AVDD gpio8, CSIPHY2; cam-sensor@2: reset gpio9, AVDD gpio14, CSIPHY1).
+  Addresses 0x10/0x1a are being probed experimentally.
+
+Signed-off-by: pixel3 port <pixel3@localhost>
+---
+ .../dts/qcom/sdm845-google-crosshatch.dts     | 76 ++++++++++++++++++-
+ 1 file changed, 74 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts b/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
+index 8c1da48c5..7ede0385c 100644
+--- a/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
++++ b/arch/arm64/boot/dts/qcom/sdm845-google-crosshatch.dts
+@@ -316,6 +316,21 @@ irq-pins {
+ #include <dt-bindings/media/video-interface-devices.h>
+ 
+ / {
++	cam_front2_avdd: cam-front2-avdd-regulator {
++		compatible = "regulator-fixed";
++		regulator-name = "cam_front2_avdd";
++		regulator-min-microvolt = <2800000>;
++		regulator-max-microvolt = <2800000>;
++		startup-delay-us = <1000>;
++
++		gpios = <&tlmm 14 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		vin-supply = <&vreg_bob>;
++
++		pinctrl-0 = <&cam_front2_avdd_default>;
++		pinctrl-names = "default";
++	};
++
+ 	cam_front_avdd: cam-front-avdd-regulator {
+ 		compatible = "regulator-fixed";
+ 		regulator-name = "cam_front_avdd";
+@@ -348,6 +363,13 @@ &camss {
+ 	status = "okay";
+ 
+ 	ports {
++		port@1 {
++			camss_endpoint1: endpoint {
++				data-lanes = <0 1 2 3>;
++				remote-endpoint = <&cam_front2_endpoint>;
++			};
++		};
++
+ 		port@2 {
+ 			camss_endpoint2: endpoint {
+ 				data-lanes = <0 1 2 3>;
+@@ -358,9 +380,13 @@ camss_endpoint2: endpoint {
+ };
+ 
+ &cci_i2c1 {
+-	camera@1a {
++	/*
++	 * HACK: two front sensors share CCI1 and MCLK2; which one answers at
++	 * 0x1a is not known (probe of the gpio21 one at 0x1a got no ACK).
++	 */
++	camera@10 {
+ 		compatible = "sony,imx355";
+-		reg = <0x1a>;
++		reg = <0x10>;
+ 
+ 		clocks = <&clock_camcc CAM_CC_MCLK2_CLK>;
+ 		assigned-clocks = <&clock_camcc CAM_CC_MCLK2_CLK>;
+@@ -386,6 +412,36 @@ cam_front_endpoint: endpoint {
+ 			};
+ 		};
+ 	};
++
++	/* stock cam-sensor@2 (wide): reset gpio9, AVDD enable gpio14, CSIPHY1 */
++	camera@1a {
++		compatible = "sony,imx355";
++		reg = <0x1a>;
++
++		clocks = <&clock_camcc CAM_CC_MCLK2_CLK>;
++		assigned-clocks = <&clock_camcc CAM_CC_MCLK2_CLK>;
++		assigned-clock-rates = <24000000>;
++
++		reset-gpios = <&tlmm 9 GPIO_ACTIVE_LOW>;
++
++		avdd-supply = <&cam_front2_avdd>;
++		dvdd-supply = <&vreg_s3a_1p35>;
++		dovdd-supply = <&vreg_lvs1a_1p8>;
++
++		pinctrl-0 = <&cam_mclk2_default>, <&cam_front2_default>;
++		pinctrl-names = "default";
++
++		rotation = <270>;
++		orientation = <MEDIA_ORIENTATION_FRONT>;
++
++		port {
++			cam_front2_endpoint: endpoint {
++				data-lanes = <1 2 3 4>;
++				link-frequencies = /bits/ 64 <360000000>;
++				remote-endpoint = <&camss_endpoint1>;
++			};
++		};
++	};
+ };
+ 
+ &tlmm {
+@@ -396,6 +452,20 @@ cam_front_default: cam-front-default-state {
+ 		bias-disable;
+ 	};
+ 
++	cam_front2_default: cam-front2-default-state {
++		pins = "gpio9";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	cam_front2_avdd_default: cam-front2-avdd-default-state {
++		pins = "gpio14";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
+ 	cam_front_avdd_default: cam-front-avdd-default-state {
+ 		pins = "gpio8";
+ 		function = "gpio";
+@@ -432,7 +502,9 @@ dai@1 {
+ 
+ &sound {
+ 	/* stock: DMIC0 <- MIC BIAS1, DMIC3 <- MIC BIAS3, DMIC4 <- MIC BIAS4 */
++	/* MCLK supply is only pulled in through routes: needed by the TX path too */
+ 	audio-routing = "RX_BIAS", "MCLK",
++			"AIF1 CAP", "MCLK",
+ 			"DMIC0", "MIC BIAS1",
+ 			"DMIC3", "MIC BIAS3",
+ 			"DMIC4", "MIC BIAS4";
+-- 
+2.54.0 (Apple Git-157)
+

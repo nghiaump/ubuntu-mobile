@@ -1,0 +1,146 @@
+From 257596c600ce615a3e232c360dc1639ee498e83d Mon Sep 17 00:00:00 2001
+From: pixel3 port <pixel3@localhost>
+Date: Sat, 14 Nov 2026 11:46:05 +0700
+Subject: [PATCH 1/2] power: supply: qcom_smbx: honour Type-C current and allow
+ raising charge current
+
+- Raise the input current limit to 1.5 A / 3 A when the Type-C source
+  advertises it through Rp (TYPE_C_STATUS_1), instead of capping every
+  USB-C charger at the BC1.2 1.5 A.
+- Expose the battery fast-charge current (FAST_CHARGE_CURRENT_CFG) as a
+  writable constant_charge_current, bounded by the battery node's
+  constant-charge-current-max-microamp (max 3 A). Without that property
+  the ceiling stays at the existing conservative 1 A, which is also the
+  value programmed at probe, so nothing changes unless userspace asks.
+
+Signed-off-by: pixel3 port <pixel3@localhost>
+---
+ drivers/power/supply/qcom_smbx.c | 56 +++++++++++++++++++++++++++++++-
+ 1 file changed, 55 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/supply/qcom_smbx.c b/drivers/power/supply/qcom_smbx.c
+index 8c18df3f3..ff815aa79 100644
+--- a/drivers/power/supply/qcom_smbx.c
++++ b/drivers/power/supply/qcom_smbx.c
+@@ -349,6 +349,11 @@
+ #define CDP_CURRENT_UA					1500000
+ #define DCP_CURRENT_UA					1500000
+ #define CURRENT_MAX_UA					DCP_CURRENT_UA
++#define TYPEC_1P5A_UA					1500000
++#define TYPEC_3A_UA					3000000
++/* Battery charge current ceiling without a battery constant-charge-current-max */
++#define FCC_DEFAULT_MAX_UA				1000000
++#define FCC_HARD_MAX_UA					3000000
+ 
+ /* pmi8998 registers represent current in increments of 1/40th of an amp */
+ #define CURRENT_SCALE_FACTOR				25000
+@@ -396,6 +401,7 @@ struct smb_chip {
+ 	struct regmap *regmap;
+ 	struct power_supply_battery_info *batt_info;
+ 	u8 initial_charge_enable;
++	unsigned int fcc_max_ua;
+ 
+ 	struct delayed_work status_change_work;
+ 	int cable_irq;
+@@ -418,6 +424,8 @@ static enum power_supply_property smb_properties[] = {
+ 	POWER_SUPPLY_PROP_ONLINE,
+ 	POWER_SUPPLY_PROP_USB_TYPE,
+ 	POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR,
++	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
++	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+ };
+ 
+ static int smb_get_prop_usb_online(struct smb_chip *chip, int *val)
+@@ -555,7 +563,7 @@ static int smb_set_current_limit(struct smb_chip *chip, unsigned int val)
+ 
+ static void smb_status_change_work(struct work_struct *work)
+ {
+-	unsigned int charger_type, current_ua;
++	unsigned int charger_type, current_ua, typec_stat;
+ 	int usb_online = 0;
+ 	int count, rc;
+ 	struct smb_chip *chip;
+@@ -601,6 +609,20 @@ static void smb_status_change_work(struct work_struct *work)
+ 		break;
+ 	}
+ 
++	/*
++	 * A Type-C source advertises 1.5 A or 3 A at 5 V through its Rp
++	 * (no PD needed). BC1.2 detection alone caps a USB-C charger at
++	 * 1.5 A; AICL still backs off if the source collapses.
++	 */
++	if (!regmap_read(chip->regmap, chip->base + TYPE_C_STATUS_1, &typec_stat)) {
++		if (typec_stat & UFP_TYPEC_RD3P0_BIT)
++			current_ua = max(current_ua, TYPEC_3A_UA);
++		else if (typec_stat & UFP_TYPEC_RD1P5_BIT)
++			current_ua = max(current_ua, TYPEC_1P5A_UA);
++		dev_info(chip->dev, "Type-C status 0x%02x, input limit %u uA\n",
++			 typec_stat, current_ua);
++	}
++
+ 	smb_set_current_limit(chip, current_ua);
+ 	power_supply_changed(chip->chg_psy);
+ }
+@@ -683,6 +705,18 @@ static int smb_get_property(struct power_supply *psy,
+ 		return smb_get_prop_health(chip, &val->intval);
+ 	case POWER_SUPPLY_PROP_USB_TYPE:
+ 		return smb_apsd_get_charger_type(chip, &val->intval);
++	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT: {
++		unsigned int fcc;
++		int rc = regmap_read(chip->regmap, chip->base + FAST_CHARGE_CURRENT_CFG, &fcc);
++
++		if (rc < 0)
++			return rc;
++		val->intval = (fcc & FAST_CHARGE_CURRENT_SETTING_MASK) * CURRENT_SCALE_FACTOR;
++		return 0;
++	}
++	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
++		val->intval = chip->fcc_max_ua;
++		return 0;
+ 	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR: {
+ 		unsigned int cmd;
+ 		int rc = regmap_read(chip->regmap, chip->base + CHARGING_ENABLE_CMD, &cmd);
+@@ -712,6 +746,13 @@ static int smb_set_property(struct power_supply *psy,
+ 					  USBIN_SUSPEND_BIT, !val->intval);
+ 	case POWER_SUPPLY_PROP_CURRENT_MAX:
+ 		return smb_set_current_limit(chip, val->intval);
++	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
++		if (val->intval < 0)
++			return -EINVAL;
++		return regmap_update_bits(chip->regmap, chip->base + FAST_CHARGE_CURRENT_CFG,
++					  FAST_CHARGE_CURRENT_SETTING_MASK,
++					  min_t(unsigned int, val->intval, chip->fcc_max_ua) /
++					  CURRENT_SCALE_FACTOR);
+ 	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR:
+ 		/*
+ 		 * Inhibit only stops charging the battery: USBIN keeps powering
+@@ -740,6 +781,7 @@ static int smb_property_is_writable(struct power_supply *psy,
+ 	case POWER_SUPPLY_PROP_STATUS:
+ 	case POWER_SUPPLY_PROP_CURRENT_MAX:
+ 	case POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR:
++	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
+ 		return 1;
+ 	default:
+ 		return 0;
+@@ -1059,6 +1101,18 @@ static int smb_probe(struct platform_device *pdev)
+ 		return dev_err_probe(chip->dev, rc,
+ 				     "Failed to get battery info\n");
+ 
++	/*
++	 * Battery charge current stays at the conservative 1 A set by the init
++	 * sequence; userspace may raise it (constant_charge_current) up to the
++	 * battery's constant-charge-current-max, e.g. following a temperature/
++	 * voltage step-charging table.
++	 */
++	chip->fcc_max_ua = FCC_DEFAULT_MAX_UA;
++	if (power_supply_battery_info_has_prop(chip->batt_info,
++					       POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX))
++		chip->fcc_max_ua = min_t(unsigned int, FCC_HARD_MAX_UA,
++					 chip->batt_info->constant_charge_current_max_ua);
++
+ 	rc = devm_delayed_work_autocancel(chip->dev, &chip->status_change_work,
+ 					  smb_status_change_work);
+ 	if (rc)
+-- 
+2.54.0 (Apple Git-157)
+
