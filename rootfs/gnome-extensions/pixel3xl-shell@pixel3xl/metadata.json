@@ -1,0 +1,7 @@
+{
+  "uuid": "pixel3xl-shell@pixel3xl",
+  "name": "Pixel 3 XL shell tweaks",
+  "description": "(1) Tai thỏ: dải đen + thanh trên/vùng làm việc dời xuống dưới (panel 1440x2960 dọc; px vật lý trong ~/.config/pixel-notch-px). (2) Bàn phím ảo cho app chỉ gửi text-input-v3 enable một lần (Chrome/Electron).",
+  "shell-version": ["46"],
+  "version": 3
+}

@@ -1,0 +1,188 @@
+#!/usr/bin/python3
+"""Vá extension Desktop Icons NG (ding@rastersoft.com, gói gnome-shell-extension-desktop-icons-ng):
+GIỮ LÂU bằng cảm ứng (>= 0.6 s, không kéo) trên icon hoặc nền desktop = CHUỘT PHẢI.
+
+- Chỉ áp cho sự kiện có nguồn TOUCHSCREEN (chuột/RDP giữ nguyên).
+- Menu mở khi NHẤC TAY (nếu mở lúc đang giữ, cú thả tay có thể bấm nhầm mục đầu của menu).
+- Idempotent (đánh dấu PIXEL3XL-LONGPRESS), sao lưu *.pixel-orig, kiểm tra từng chỗ chèn — gói đổi mã thì báo lỗi, không vá bừa.
+- Chạy lại sau khi cập nhật gói (hook apt /etc/apt/apt.conf.d/99-pixel-ding-longpress làm tự động).
+Tài liệu: docs/software/touch-ui.md
+Dùng: sudo pixel-ding-longpress [--check] [--restore] [--quiet]
+"""
+import os
+import shutil
+import sys
+
+APP = "/usr/share/gnome-shell/extensions/ding@rastersoft.com/app"
+MARK = "PIXEL3XL-LONGPRESS"
+QUIET = "--quiet" in sys.argv
+
+ICON_HELPERS = """    /* PIXEL3XL-LONGPRESS: giữ lâu bằng cảm ứng = chuột phải (menu mở khi nhấc tay) */
+    _pixelIsTouch(event) {
+        const dev = event.get_source_device();
+        return !!dev && dev.get_source() === Gdk.InputSource.TOUCHSCREEN;
+    }
+
+    _pixelLpCancel() {
+        if (this._pixelLpId) {
+            GLib.source_remove(this._pixelLpId);
+            this._pixelLpId = 0;
+        }
+    }
+
+    _onPressButton(actor, event) {"""
+
+ICON_PRESS_OLD = """        let controlPressed = !!(state & Gdk.ModifierType.CONTROL_MASK);
+        if (button == 3) {
+            this._doButtonThreePressed(event, shiftPressed, controlPressed);"""
+ICON_PRESS_NEW = """        let controlPressed = !!(state & Gdk.ModifierType.CONTROL_MASK);
+        /* PIXEL3XL-LONGPRESS */
+        this._pixelLongPressed = false;
+        this._pixelLpCancel();
+        if (button == 1 && this._pixelIsTouch(event)) {
+            this._pixelLpId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 600, () => {
+                this._pixelLpId = 0;
+                this._pixelLongPressed = true;
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        if (button == 3) {
+            this._doButtonThreePressed(event, shiftPressed, controlPressed);"""
+
+ICON_RELEASE_OLD = """    _onReleaseButton(actor, event) {
+        let button = event.get_button()[1];"""
+ICON_RELEASE_NEW = """    _onReleaseButton(actor, event) {
+        /* PIXEL3XL-LONGPRESS */
+        this._pixelLpCancel();
+        if (this._pixelLongPressed) {
+            this._pixelLongPressed = false;
+            this._primaryButtonPressed = false;
+            this._doButtonThreePressed(event);
+            return true;
+        }
+        let button = event.get_button()[1];"""
+
+ICON_LEAVE_OLD = """    _onLeave(element) {
+        this._primaryButtonPressed = false;"""
+ICON_LEAVE_NEW = """    _onLeave(element) {
+        this._pixelLpCancel(); /* PIXEL3XL-LONGPRESS: kéo ra ngoài icon = huỷ */
+        this._primaryButtonPressed = false;"""
+
+MGR_PRESS_OLD = """    onPressButton(x, y, event, grid) {
+        this._clickX = Math.floor(x);
+        this._clickY = Math.floor(y);
+        let button = event.get_button()[1];
+        let state = event.get_state()[1];"""
+MGR_PRESS_NEW = MGR_PRESS_OLD + """
+        /* PIXEL3XL-LONGPRESS: giữ lâu trên nền desktop = menu desktop (mở khi nhấc tay) */
+        this._pixelLongPressed = false;
+        if (this._pixelLpId) {
+            GLib.source_remove(this._pixelLpId);
+            this._pixelLpId = 0;
+        }
+        const pixelDev = event.get_source_device();
+        if (button == 1 && pixelDev && pixelDev.get_source() === Gdk.InputSource.TOUCHSCREEN) {
+            this._pixelLpX = x;
+            this._pixelLpY = y;
+            this._pixelLpId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 600, () => {
+                this._pixelLpId = 0;
+                this._pixelLongPressed = true;
+                if (this.rubberBand) {
+                    this.rubberBand = false;
+                    this.selectionRectangle = null;
+                    for (let g of this._desktops)
+                        g.queue_draw();
+                }
+                return GLib.SOURCE_REMOVE;
+            });
+        }"""
+
+MGR_MOTION_OLD = """    onMotion(x, y) {"""
+MGR_MOTION_NEW = """    onMotion(x, y) {
+        /* PIXEL3XL-LONGPRESS: di chuyển > 20 px = kéo/chọn vùng, huỷ giữ lâu */
+        if (this._pixelLpId && (Math.abs(x - this._pixelLpX) > 20 || Math.abs(y - this._pixelLpY) > 20)) {
+            GLib.source_remove(this._pixelLpId);
+            this._pixelLpId = 0;
+        }"""
+
+MGR_RELEASE_OLD = """    onReleaseButton() {
+        if (this.rubberBand) {"""
+MGR_RELEASE_NEW = """    onReleaseButton(grid, event) {
+        /* PIXEL3XL-LONGPRESS */
+        if (this._pixelLpId) {
+            GLib.source_remove(this._pixelLpId);
+            this._pixelLpId = 0;
+        }
+        if (this._pixelLongPressed && event) {
+            this._pixelLongPressed = false;
+            this._prepareMenu();
+            this._menu.popup_at_pointer(event);
+            return false;
+        }
+        if (this.rubberBand) {"""
+
+GRID_RELEASE_OLD = """            this._desktopManager.onReleaseButton(this);"""
+GRID_RELEASE_NEW = """            this._desktopManager.onReleaseButton(this, event); /* PIXEL3XL-LONGPRESS */"""
+
+PATCHES = {
+    "desktopIconItem.js": [
+        ("    _onPressButton(actor, event) {", ICON_HELPERS),
+        (ICON_PRESS_OLD, ICON_PRESS_NEW),
+        (ICON_RELEASE_OLD, ICON_RELEASE_NEW),
+        (ICON_LEAVE_OLD, ICON_LEAVE_NEW),
+    ],
+    "desktopManager.js": [
+        (MGR_PRESS_OLD, MGR_PRESS_NEW),
+        (MGR_MOTION_OLD, MGR_MOTION_NEW),
+        (MGR_RELEASE_OLD, MGR_RELEASE_NEW),
+    ],
+    "desktopGrid.js": [
+        (GRID_RELEASE_OLD, GRID_RELEASE_NEW),
+    ],
+}
+
+
+def say(msg):
+    if not QUIET:
+        print(msg)
+
+
+def main():
+    if not os.path.isdir(APP):
+        say(f"không có {APP} — bỏ qua")
+        return 0
+    restore = "--restore" in sys.argv
+    check = "--check" in sys.argv
+    rc = 0
+    for name, edits in PATCHES.items():
+        path = os.path.join(APP, name)
+        orig = path + ".pixel-orig"
+        src = open(path, encoding="utf-8").read()
+        if restore:
+            if os.path.exists(orig):
+                shutil.copy2(orig, path)
+                os.remove(orig)
+                say(f"khôi phục {name}")
+            continue
+        if MARK in src:
+            say(f"{name}: đã vá")
+            continue
+        new = src
+        for old, rep in edits:
+            if new.count(old) != 1:
+                print(f"!! {name}: không tìm thấy đúng 1 chỗ chèn (gói đã đổi mã?) — KHÔNG vá file này", file=sys.stderr)
+                rc = 1
+                break
+            new = new.replace(old, rep, 1)
+        else:
+            if check:
+                say(f"{name}: vá được (chưa ghi, --check)")
+                continue
+            shutil.copy2(path, orig)
+            open(path, "w", encoding="utf-8").write(new)
+            say(f"{name}: đã vá (bản gốc {os.path.basename(orig)})")
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())
