@@ -54,6 +54,11 @@ sudo install -d /etc/dconf/db/local.d /etc/dconf/profile
 printf "[org/gnome/desktop/session]\nidle-delay=uint32 0\n\n[org/gnome/settings-daemon/plugins/power]\nsleep-inactive-ac-type='nothing'\nsleep-inactive-battery-type='nothing'\nidle-dim=false\npower-button-action='nothing'\n\n[org/gnome/desktop/screensaver]\nlock-enabled=false\nubuntu-lock-on-suspend=false\n\n[org/gnome/desktop/lockdown]\ndisable-lock-screen=true\n" | sudo tee /etc/dconf/db/local.d/90-pixel-no-blank >/dev/null
 sudo install -d /etc/dconf/db/local.d/locks
 printf "/org/gnome/desktop/session/idle-delay\n/org/gnome/settings-daemon/plugins/power/sleep-inactive-ac-type\n/org/gnome/settings-daemon/plugins/power/sleep-inactive-battery-type\n/org/gnome/settings-daemon/plugins/power/idle-dim\n/org/gnome/settings-daemon/plugins/power/power-button-action\n/org/gnome/desktop/screensaver/lock-enabled\n/org/gnome/desktop/screensaver/ubuntu-lock-on-suspend\n/org/gnome/desktop/lockdown/disable-lock-screen\n" | sudo tee /etc/dconf/db/local.d/locks/90-pixel-no-blank >/dev/null
+# Pin cạn: UPower mặc định HybridSleep -> ngủ = tắt panel = treo/reset. Tắt máy thay vì ngủ (RUNBOOK §6).
+sudo sed -i 's/^CriticalPowerAction=.*/CriticalPowerAction=PowerOff/' /etc/UPower/UPower.conf
+# fwupd (kéo theo bởi ubuntu-desktop) dò phân vùng EFI qua udisks -> từng mount modem_b. Vô dụng trên máy này: mask.
+sudo systemctl disable --now fwupd-refresh.timer fwupd.service >/dev/null 2>&1 || true
+sudo systemctl mask fwupd.service fwupd-refresh.service fwupd-refresh.timer >/dev/null
 [ -f /etc/dconf/profile/user ] || printf "user-db:user\nsystem-db:local\n" | sudo tee /etc/dconf/profile/user >/dev/null
 sudo dconf update
 echo "== GDM tự đăng nhập user ubuntu (tablet; bàn phím ảo không có phím số)"

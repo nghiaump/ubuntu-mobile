@@ -1,0 +1,4 @@
+# Ẩn MỌI ổ/phân vùng UFS của Android khỏi udisks/GNOME (không tự mount, không hiện trong Files) — trừ userdata (Ubuntu).
+# Sự cố 2026-11-14: fwupd dò phân vùng EFI qua udisks -> mount modem_b (sda14, FAT). LUẬT AN TOÀN 2: không đụng phân vùng firmware.
+SUBSYSTEM=="block", KERNEL=="sd[a-z]", ENV{UDISKS_IGNORE}="1"
+SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", ENV{ID_PART_ENTRY_NAME}!="userdata", ENV{UDISKS_IGNORE}="1", ENV{UDISKS_AUTO}="0"
