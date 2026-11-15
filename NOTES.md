@@ -553,3 +553,9 @@ Vấn đề mở: (1) `systemctl reboot` treo (dùng `reboot -ff` tạm), (2) ch
 - Bluetooth: kernel OK (crbtfw21/crnv21, setup completed) nhưng bluetoothctl "No default controller": btmgmt config = Unconfigured, missing public-address
   (ABL không truyền địa chỉ). pixel-bt-addr.service gán địa chỉ ổn định sha256(serial) (locally administered). Bẫy btmgmt: </dev/null thoát trước phản hồi,
   không stdin thì treo (systemctl start treo) → `sleep 2 | timeout 5 btmgmt`. Kiểm chứng bằng rmmod/modprobe hci_uart. Quét thấy thiết bị (RSSI -59…-100).
+- DING: người dùng báo chưa ăn → log tạm PIXELDBG: chạm = nút 1 từ "Wayland Touch" (src 5 = TOUCHSCREEN), release lp=true → bản vá đúng;
+  lần trước nhiều khả năng giữ chưa đủ 0.6 s. Người dùng xác nhận chuột phải OK. Gỡ log (khôi phục bản vá), sửa pkill tự giết SSH ([d]ing) trong script 99.
+- README viết lại bằng tiếng Anh, văn phong chuyên nghiệp, bỏ emoji; docs/ giữ tiếng Việt (song ngữ thuật ngữ) theo người dùng.
+- Kiểm tra bền vững sau reboot (chưa reboot thật): kernel #10/DTB 0013 ở boot_b, alias module PD, các dịch vụ enabled+active (qbootctl, charge-limit,
+  power-log, bt-addr, sound, powerkey, bluetooth), fwupd masked, cấu hình sạc 90/85+Defender, UPower PowerOff, journald 1G, udev, hook DING, DING 3/3,
+  Chrome .desktop, gsettings OSK/secondary-click, extension v3 đang chạy (strut 236), slot b Successful, GDM autologin.

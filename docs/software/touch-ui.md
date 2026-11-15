@@ -49,7 +49,7 @@ Cập nhật: 2026-11-15. Liên quan: [`rootfs-services.md`](rootfs-services.md)
 | Nơi | Trạng thái | Cách |
 |---|---|---|
 | Dock / thanh tác vụ (GNOME Shell) | ✅ | GNOME Shell tự xử lý cảm ứng giữ lâu |
-| Icon + nền desktop (DING) | ✅ (2026-11-15) | vá DING, xem §5 |
+| Icon + nền desktop (DING) | ✅ (người dùng xác nhận 2026-11-15) | vá DING, xem §5 |
 | Chrome (nội dung web) | ✅ | Chrome tự xử lý |
 | App GTK4 (Files, Text Editor…) | ✅ phần lớn | app tự xử lý |
 | App khác (GTK3 cũ, XWayland…) | ❌ | cần dịch vụ uinput (dưới) |
@@ -91,6 +91,9 @@ Cập nhật: 2026-11-15. Liên quan: [`rootfs-services.md`](rootfs-services.md)
   | `desktopIconItem.js` | `_pixelIsTouch(event)` (nguồn `Gdk.InputSource.TOUCHSCREEN`), hẹn giờ 600 ms khi nhấn nút 1 bằng cảm ứng; `_onReleaseButton`: nếu đã giữ lâu → `_doButtonThreePressed` (menu icon), chặn hành động thả tay; `_onLeave` huỷ |
   | `desktopManager.js` | `onPressButton`: hẹn giờ 600 ms trên nền (dừng rubberband khi tới hạn); `onMotion`: di chuyển > 20 px huỷ; `onReleaseButton(grid, event)`: nếu giữ lâu → menu desktop `popup_at_pointer(event)` |
   | `desktopGrid.js` | truyền `event` vào `onReleaseButton` |
+- Đo được (log tạm `PIXELDBG`): DING nhận chạm dưới dạng **button-press/release nút 1 giả lập** từ thiết bị `Wayland Touch`,
+  `get_source_device().get_source()` = **5** (`Gdk.InputSource.TOUCHSCREEN`) → điều kiện "chỉ cảm ứng" đúng; phải giữ **≥ 0.6 s** rồi nhấc tay.
+- Bẫy khi khởi động lại DING qua SSH: `pkill -f "ding@…/ding.js"` khớp luôn chính lệnh `bash -c` của SSH → giết phiên. Dùng mẫu `[d]ing@…`.
 - Thiết kế: **chỉ sự kiện cảm ứng** (chuột/RDP không đổi); **menu mở khi nhấc tay** (mở lúc đang giữ thì cú thả có thể bấm nhầm mục đầu menu, và Wayland cần serial của sự kiện gần nhất cho popup).
 - An toàn: kiểm tra mỗi chỗ chèn xuất hiện **đúng 1 lần**, không thì báo `!!` và không vá file đó; sao lưu `*.pixel-orig`; `--check` (thử), `--restore` (gỡ).
 - Cập nhật gói: apt ghi đè file → hook **`/etc/apt/apt.conf.d/99-pixel-ding-longpress`** (`DPkg::Post-Invoke`) tự vá lại. Nếu bản DING mới đổi mã, hook im lặng
