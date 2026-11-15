@@ -40,6 +40,9 @@ pwrseq-qcom-wcn (WCN3990 PMU) ── ath10k_snoc ── chờ dịch vụ QMI "W
   bit locally-administered = 1, multicast = 0 (giống MAC Wi-Fi "stable"). Ghi đè: `BDADDR=…` trong `/etc/default/pixel-bt-addr`.
 - Bẫy `btmgmt` (bluez 5.72, bt_shell) trong dịch vụ: stdin `/dev/null` → thoát ngay **trước khi** có phản hồi (không in gì, tưởng "đã cấu hình");
   không stdin → chờ mãi. Dùng `sleep 2 | timeout 5 btmgmt …`.
+- **Race lúc boot (2026-11-15, phát hiện khi khởi động lại thật):** `hci0` có trong sysfs ở ~5.5 s nhưng btqca nạp firmware xong ở ~6.3 s;
+  hỏi mgmt trong khoảng đó controller chưa nằm trong danh sách nào → bản đầu tưởng "đã có địa chỉ" và bỏ qua → Bluetooth không lên.
+  Sửa: lặp tối đa 60 s tới khi controller là *Unconfigured* (gán) hoặc có trong `btmgmt info` (đã cấu hình). Tái hiện: `rmmod hci_uart && modprobe hci_uart && systemctl restart pixel-bt-addr` ngay lập tức → gán thành công.
 - Kiểm chứng: `rmmod hci_uart && modprobe hci_uart` (controller về unconfigured) → `systemctl restart pixel-bt-addr` → "Set Public Address complete" → `Powered: yes`.
 - Lựa chọn khác (chưa làm): đặt `local-bd-address` trong DT (cần build/flash DTB).
 

@@ -559,3 +559,9 @@ Vấn đề mở: (1) `systemctl reboot` treo (dùng `reboot -ff` tạm), (2) ch
 - Kiểm tra bền vững sau reboot (chưa reboot thật): kernel #10/DTB 0013 ở boot_b, alias module PD, các dịch vụ enabled+active (qbootctl, charge-limit,
   power-log, bt-addr, sound, powerkey, bluetooth), fwupd masked, cấu hình sạc 90/85+Defender, UPower PowerOff, journald 1G, udev, hook DING, DING 3/3,
   Chrome .desktop, gsettings OSK/secondary-click, extension v3 đang chạy (strut 236), slot b Successful, GDM autologin.
+
+### 2026-11-15 — kiểm tra sau khi người dùng khởi động lại máy
+- system running, không unit lỗi (systemd-backlight lần này OK). Giữ đủ: kernel #10/DTB 0013, PD (usb_power_delivery, ICL 3 A), sạc 90/85 + Defender,
+  power-log, Wi-Fi, Tailscale, 4 container server game healthy ("Up 56 years" = do RTC 1970 trước NTP, chỉ hiển thị), loa mặc định, DING, extension v3, slot b Successful.
+- 🔴 Bluetooth không lên: race — pixel-bt-addr chạy 5.5 s khi hci0 có trong sysfs nhưng QCA setup xong 6.3 s → mgmt chưa liệt kê → "bỏ qua".
+  Sửa: lặp tới khi Unconfigured (gán) hoặc có trong btmgmt info (bỏ qua), tối đa 60 s. Tái hiện race bằng rmmod/modprobe + restart ngay → OK, Powered yes.
