@@ -20,9 +20,18 @@ fi
 # btmgmt (bt_shell) khi không có terminal: stdin /dev/null -> thoát NGAY trước khi nhận phản hồi (không in gì);
 # không có stdin -> chờ mãi. Cho stdin là pipe mở 2 s (sleep 2 |) + timeout 5.
 mgmt() { sleep 2 | timeout 5 btmgmt "$@" 2>&1; }
-if mgmt config | grep -q "missing options:.*public-address"; then
-  mgmt --index 0 public-addr "$BDADDR" | tail -1
-  echo "đã gán địa chỉ Bluetooth (locally administered, ổn định theo máy)"
-else
-  echo "controller đã có địa chỉ — bỏ qua"
-fi
+# hci0 xuất hiện trong sysfs TRƯỚC khi btqca nạp xong firmware (~0.8 s sau): lúc đó controller chưa nằm trong
+# danh sách nào của mgmt -> phải chờ tới khi nó là "Unconfigured" (thiếu địa chỉ) hoặc đã cấu hình (sự cố boot 2026-11-15).
+for i in $(seq 1 30); do
+  if mgmt config | grep -q "missing options:.*public-address"; then
+    mgmt --index 0 public-addr "$BDADDR" | tail -1
+    echo "đã gán địa chỉ Bluetooth (locally administered, ổn định theo máy)"
+    exit 0
+  fi
+  if mgmt info | grep -q "^hci0:"; then
+    echo "controller đã có địa chỉ — bỏ qua"
+    exit 0
+  fi
+  sleep 2
+done
+echo "!! controller không sẵn sàng sau 60 s"
