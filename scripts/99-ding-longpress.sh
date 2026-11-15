@@ -17,6 +17,6 @@ sudo install -m755 /tmp/pixel-ding-longpress /usr/local/sbin/
 sudo install -m644 /tmp/99-pixel-ding-longpress /etc/apt/apt.conf.d/
 if [ "$MODE" = restore ]; then sudo pixel-ding-longpress --restore; else sudo pixel-ding-longpress --check && sudo pixel-ding-longpress; fi
 # khởi động lại ứng dụng DING (gjs .../ding@rastersoft.com/app/ding.js); extension sẽ tự chạy lại
-pkill -u ubuntu -f "ding@rastersoft.com/app/ding.js" && echo "đã khởi động lại DING" || echo "DING không chạy"
-sleep 4; pgrep -u ubuntu -f "ding@rastersoft.com/app/ding.js" >/dev/null && echo "DING đang chạy lại" || echo "!! DING chưa chạy lại"
+pkill -u ubuntu -f "[d]ing@rastersoft.com/app/ding.js" && echo "đã khởi động lại DING" || echo "DING không chạy"
+sleep 4; pgrep -u ubuntu -f "[d]ing@rastersoft.com/app/ding.js" >/dev/null && echo "DING đang chạy lại" || echo "!! DING chưa chạy lại"
 INNER
