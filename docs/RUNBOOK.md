@@ -197,6 +197,8 @@ chỉ khi thật cần, hỏi người dùng). **Không bao giờ `fastboot flas
 - ⏳ "Tablet": scale giao diện, bàn phím ảo, chia sẻ chính màn hình qua RDP (thay xrdp).
 - ✅ Kernel #8 (boot_b, 2026-11-13 ~23:35): **% pin** (MAX1720x), **loa** (2× CS35L36, PipeWire, phím âm lượng — patch 0004 + 0005). **qbootctl** đánh dấu slot b mỗi lần boot (§6.5).
 - ✅ 2026-11-15: **Bluetooth** (`pixel-bt-addr.service` gán địa chỉ), **Defender** sạc (35 °C/60 phút → 80 %).
+- ✅ 2026-11-19: **tự xả về trần** (`DRAIN=1`): pin > STOP+2 % khi cắm → ngắt nguồn USB vào, xả về STOP (89→60 % lúc bật). Sửa lỗi dịch vụ sạc chạy trước driver lúc boot.
+- ✅ 2026-11-18: giới hạn sạc hạ về **60/55** cho server 24/7.
 - ✅ 2026-11-15: giới hạn sạc nâng lên **90/85** (`/etc/default/pixel-charge-limit`); pin còn 3135/3456 mAh (~91 %).
 - ✅ 2026-11-14: `health=Dead` sửa (patch 0006, module); **giới hạn sạc 75–80%** (patch 0008 module + `pixel-charge-limit`); lệnh `pin`; Termius qua Tailscale; chặn fwupd/udisks mount phân vùng Android.
 - ⏳ Camera trước (IMX355) + micro (patch 0007 đã viết, build #9 có, CHƯA thử; libcamera cần người dùng tự chạy `scripts/56-libcamera.sh`). Ngủ thật (suspend) cần sửa bật lại panel.

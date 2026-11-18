@@ -7,6 +7,7 @@ show() {
   ma=$((i / 1000)); [ "$on" = 1 ] && src="cắm sạc ($st)" || src="chạy pin"
   beh=$(sed -n 's/.*\[\(.*\)\].*/\1/p' $C/charge_behaviour 2>/dev/null)
   [ "$beh" = inhibit-charge ] && src="$src, giới hạn: NGỪNG NẠP"
+  [ -e /run/pixel-charge-draining ] && src="ngắt nguồn USB, tự xả về $(cat /run/pixel-charge-draining)%"
   if [ $ma -lt 0 ]; then flow="xả $(( -ma )) mA"; else flow="nạp $ma mA"; fi
   printf "Pin %s%%  |  %s  |  %s  |  %d.%02d V  |  %d.%d °C  |  %s\n" \
     "$cap" "$src" "$flow" $((v/1000000)) $(((v/10000)%100)) $((t/10)) $((t%10)) "$(cat $B/health)"

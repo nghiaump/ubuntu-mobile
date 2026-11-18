@@ -591,3 +591,10 @@ Vấn đề mở: (1) `systemctl reboot` treo (dùng `reboot -ff` tạm), (2) ch
 - Thay nóng module BT: lần 1 `rmmod bluetooth` thất bại (bnep tự nạp, stop bluetooth bị "canceled") → bluetooth.ko CŨ + rfcomm/bnep/hci_uart MỚI (srcversion lệch).
   Sửa: mask --runtime bluetooth → stop → modprobe -r toàn bộ → modprobe hci_uart → unmask → bt-addr → bluetooth → obex agent. Tất cả srcversion khớp,
   Powered yes, UUID OBEX Object Push + File Transfer có. Chờ người dùng gửi thử file. Tài liệu connectivity.md (OBEX + quy trình thay nóng).
+
+### 2026-11-19 — tự xả về trần
+- Pin đứng 89 % dù STOP=60 (inhibit chỉ dừng nạp). Thêm `DRAIN=1 DRAIN_MARGIN=2` vào pixel-charge-limit: pin > STOP+2 khi cắm → ngắt nguồn USB vào
+  (cơ chế Defender), xả về STOP rồi cấp lại; /run/pixel-charge-draining cho lệnh `pin`. Triển khai lên máy: "TỰ XẢ: ngắt nguồn USB vào, xả từ 89% về 60%",
+  xả ~360 mA, SSH USB vẫn OK.
+- Lỗi phụ: journal lúc boot "cannot create /sys/class/power_supply/pmi8998-charger/status: Directory nonexistent" (dịch vụ chạy trước qcom_smbx) →
+  chờ tối đa 120 s. Tài liệu power-battery.md (mục DRAIN), RUNBOOK trạng thái.

@@ -4,6 +4,10 @@
 ENABLE=1
 STOP=60
 START=55
+# Tự xả về trần: pin > STOP + DRAIN_MARGIN % lúc đang cắm -> ngắt nguồn USB vào, chạy pin về STOP rồi cấp lại.
+# DRAIN=0: chỉ ngừng nạp (pin cao hơn STOP sẽ đứng yên tới khi rút sạc).
+DRAIN=1
+DRAIN_MARGIN=2
 # Sạc nhanh theo bảng Google (cần kernel có patch 0009): FAST=0 để giữ 1 A
 FAST=1
 FAST_MAX_MA=3000

@@ -88,7 +88,7 @@ chủ yếu vào **mức pin nằm chờ (STOP)** và nhiệt độ; START chỉ
 | Bền nhất (đang dùng) | 60/55 | ~3.95 V | ~11 h |
 | Cân bằng | 80/75 | ~4.16 V | ~15 h |
 | Nhiều dự phòng | 90/85 | ~4.27–4.30 V | ~17 h |
-- Pin cao hơn STOP lúc đổi cấu hình **không tự xả** (inhibit chỉ dừng nạp): cần rút sạc vài giờ, hoặc thêm tuỳ chọn "tự xả về STOP" (chưa làm).
+- Pin cao hơn STOP (vừa hạ STOP, hoặc cắm lúc pin đầy): inhibit chỉ dừng nạp nên pin **đứng yên** → dùng **tự xả về trần** (`DRAIN=1`, mặc định, mục dưới).
 - Với STOP=60, Defender (ngưỡng 80 %) không còn kích hoạt — mức 60 % đã an toàn với nhiệt.
 
 - Mặc định trong script nếu thiếu file cấu hình: 80/75. 80 % ≈ 4.16 V; 90 % ≈ 4.27–4.30 V lúc nghỉ (pin tối đa 4.4 V).
@@ -102,6 +102,17 @@ chủ yếu vào **mức pin nằm chờ (STOP)** và nhiệt độ; START chỉ
 - Kiểm chứng (cắm USB Mac, pin 97%): inhibit → dòng pin 0 mA, `status=Not charging`; auto → nạp ~440 mA, `Charging`.
 - `pmi8998-charger` `current_now`/`voltage_now` (kênh IIO USBIN) đọc 0 — chưa dùng được để đo dòng vào.
 - Xem nhanh: lệnh `pin` (hiện "giới hạn: NGỪNG NẠP").
+
+## Tự xả về trần — DRAIN (2026-11-19) ✅
+- Vấn đề: hạ STOP 90→60 lúc pin 89 % → `inhibit-charge` giữ nguyên 89 % mãi (USB cấp điện thẳng cho máy).
+- `DRAIN=1` (mặc định): pin > `STOP + DRAIN_MARGIN` (60+2) % khi đang cắm → **ngắt nguồn USB vào** (cùng cơ chế Defender, `status=Unknown` → `USBIN_SUSPEND`)
+  → máy chạy pin về `STOP` rồi cấp lại; từ đó inhibit giữ pin đứng yên. Biên 2 % tránh bật/tắt liên tục khi pin dao động quanh STOP.
+- Đang xả: file `/run/pixel-charge-draining` (nội dung = mức đích), lệnh `pin` hiện "ngắt nguồn USB, tự xả về 60%"; log `journalctl -u pixel-charge-limit | grep "TỰ XẢ\|cấp lại"`.
+- An toàn: chỉ ngắt khi pin > trần; cấp lại khi ≤ trần; dịch vụ khởi động/dừng luôn ghi `Charging`. Mạng USB (gadget) vẫn chạy khi ngắt nguồn vào.
+- Kiểm chứng 2026-11-19: "TỰ XẢ: ngắt nguồn USB vào, xả từ 89% về 60%", pin xả ~360 mA (server game chạy), `online=0`, SSH USB vẫn OK.
+  89→60 % ≈ 1000 mAh ≈ 2.5–3 h.
+- Lỗi phụ đã sửa cùng lúc: lúc boot dịch vụ chạy trước khi module `qcom_smbx` tạo `pmi8998-charger` → `cannot create …/status: Directory nonexistent`
+  (lệnh cấp lại nguồn lúc khởi động bị mất). Nay chờ tối đa 120 s cho `…/status` xuất hiện.
 
 ## USB PD 9 V (2026-11-14) ✅
 - Type-C của PMI8998 nằm trong khối USBIN (0x1300) của SMB2 — mainline không có driver; PD PHY (0x1700) cùng IP PM8150B.

@@ -31,7 +31,7 @@
 | `etc/systemd/system/pixel-wifi-fallback.service` + `usr/local/sbin/pixel-wifi-fallback.sh` | AP dự phòng |
 | `etc/systemd/system/pixel-sound.service` + `usr/local/sbin/pixel-sound.sh` | nạp card `snd-soc-sdm845` (thử lặp) + đặt mixer loa (xem `hardware/audio-camera-haptics.md`) |
 | `etc/wireplumber/main.lua.d/51-pixel3-audio.lua` | loa: `api.alsa.use-acp=false`, S16LE, tên "Loa Pixel 3 XL" |
-| `etc/systemd/system/pixel-charge-limit.service` + `usr/local/sbin/pixel-charge-limit.sh` + `etc/default/pixel-charge-limit` | giới hạn sạc 75–80% (cần patch 0008) |
+| `etc/systemd/system/pixel-charge-limit.service` + `usr/local/sbin/pixel-charge-limit.sh` + `etc/default/pixel-charge-limit` | giới hạn sạc (đang 55–60 %), sạc nhanh theo bảng Google, Defender, tự xả về trần (cần patch 0008/0009) |
 | `etc/systemd/system/pixel-power-log.{service,timer}` + `usr/local/sbin/pixel-power-log.sh` | mỗi 2 phút ghi pin/sạc/PD/nhiệt → `/var/log/pixel-power.csv`; toàn bộ log TCPM (debugfs, đọc là xoá) → `/var/log/pixel-tcpm.log` |
 | `etc/systemd/journald.conf.d/10-pixel.conf` | journal persistent, **SystemMaxUse=1G** (200M từng làm mất log 2 lần cạn pin) |
 | `etc/systemd/system/pixel-bt-addr.service` + `usr/local/sbin/pixel-bt-addr.sh` | gán địa chỉ Bluetooth ổn định cho WCN3990 (controller unconfigured) — xem `hardware/connectivity.md` |

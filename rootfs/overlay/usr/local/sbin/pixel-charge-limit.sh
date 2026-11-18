@@ -11,14 +11,19 @@
 #     Không tính nhiệt lúc đang sạc nhanh ngắn hạn (vài chục phút) nhờ ngưỡng thời gian.
 #     AN TOÀN: không bao giờ ngắt nguồn vào khi pin <= DEFEND_STOP; khởi động/dừng dịch vụ luôn cấp lại nguồn vào
 #     (ExecStopPost trong pixel-charge-limit.service).
+#  4) TỰ XẢ VỀ TRẦN (DRAIN=1): pin > STOP + DRAIN_MARGIN % khi đang cắm (vd. vừa hạ STOP, hoặc cắm lúc pin đầy)
+#     -> ngắt nguồn USB vào như Defender, chạy pin về STOP rồi cấp lại (sau đó inhibit giữ pin đứng yên).
+#     Biên DRAIN_MARGIN tránh bật/tắt liên tục khi pin dao động quanh STOP.
 # Cấu hình: /etc/default/pixel-charge-limit
 STOP=80; START=75; ENABLE=1; FAST=1; FAST_MAX_MA=3000
 DEFEND=1; DEFEND_TEMP=35; DEFEND_MINUTES=60; DEFEND_STOP=80; DEFEND_START=75
 DEFEND_RELEASE_TEMP=32; DEFEND_RELEASE_MINUTES=30
+DRAIN=1; DRAIN_MARGIN=2
 [ -r /etc/default/pixel-charge-limit ] && . /etc/default/pixel-charge-limit
 B=/sys/class/power_supply/max1720x
 C=/sys/class/power_supply/pmi8998-charger
 STATE=/run/pixel-charge-defend          # "1" khi đang ở chế độ Defender (giữ qua restart dịch vụ, mất khi reboot)
+DRAINING=/run/pixel-charge-draining     # tồn tại khi đang ngắt nguồn vào để xả (lệnh `pin` đọc)
 TICK=30
 CAP_MAH=3430
 # Bảng Google: hàng = khoảng nhiệt độ (0.1 °C), cột = điện áp pin < 4.20 / < 4.30 / <= 4.40 V, giá trị = % của C
@@ -37,12 +42,13 @@ cc_target_ua() {   # $1 = nhiệt độ 0.1 °C, $2 = điện áp µV -> in dòn
   echo $((pct * CAP_MAH * 10))
 }
 
-input_resume()  { echo Charging > $C/status 2>/dev/null; suspended=""; }   # vô điều kiện: ghi Charging khi không ngắt cũng vô hại
-input_suspend() { echo Unknown > $C/status && suspended=1; }
+input_resume()  { echo Charging > $C/status 2>/dev/null; suspended=""; rm -f $DRAINING; }   # vô điều kiện: ghi Charging khi không ngắt cũng vô hại
+input_suspend() { echo Unknown > $C/status && suspended=1 && echo "$1" > $DRAINING; }
 
-# Khởi động: luôn cấp lại nguồn vào (phòng lần trước chết khi đang xả)
-echo Charging > $C/status 2>/dev/null || true
-suspended=""
+# Khởi động: luôn cấp lại nguồn vào (phòng lần trước chết khi đang xả).
+# Lúc boot driver sạc (module qcom_smbx) có thể chưa lên -> chờ tối đa 120 s.
+i=0; while [ ! -e $C/status ] && [ $i -lt 120 ]; do sleep 1; i=$((i + 1)); done
+input_resume
 defend=$(cat $STATE 2>/dev/null || echo 0)
 hot=0; cool=0; last=""
 while :; do
@@ -64,11 +70,16 @@ while :; do
     fi
     if [ "$defend" = 1 ]; then stop=$DEFEND_STOP; start=$DEFEND_START; else stop=$STOP; start=$START; fi
 
-    # --- Xả về mức Defender: ngắt nguồn vào khi pin còn cao hơn ngưỡng; an toàn: cấp lại khi <= ngưỡng ---
-    if [ "$defend" = 1 ] && [ "$cap" -gt "$DEFEND_STOP" ] && [ "$(cat $C/online)" = 1 ]; then
-      [ -z "$suspended" ] && input_suspend && echo "DEFENDER: ngắt nguồn USB vào, xả từ $cap% về $DEFEND_STOP%"
-    elif [ -n "$suspended" ] && { [ "$defend" != 1 ] || [ "$cap" -le "$DEFEND_STOP" ]; }; then
-      input_resume; echo "DEFENDER: cấp lại nguồn USB vào ở $cap%"
+    # --- Xả về trần: ngắt nguồn vào khi pin còn cao hơn ngưỡng; an toàn: cấp lại khi <= trần (không bao giờ < START) ---
+    #     Defender: xả khi > DEFEND_STOP. Thường (DRAIN=1): xả khi > STOP + DRAIN_MARGIN, về STOP.
+    drain_hi=""
+    if [ "$defend" = 1 ]; then drain_hi=$stop; why=DEFENDER
+    elif [ "$DRAIN" = 1 ] && [ "$ENABLE" = 1 ]; then drain_hi=$((stop + DRAIN_MARGIN)); why="TỰ XẢ"
+    fi
+    if [ -z "$suspended" ] && [ -n "$drain_hi" ] && [ "$cap" -gt "$drain_hi" ] && [ "$(cat $C/online)" = 1 ]; then
+      input_suspend "$stop" && echo "$why: ngắt nguồn USB vào, xả từ $cap% về $stop%"
+    elif [ -n "$suspended" ] && { [ -z "$drain_hi" ] || [ "$cap" -le "$stop" ]; }; then
+      input_resume; echo "cấp lại nguồn USB vào ở $cap%"
     fi
 
     # --- Giới hạn sạc ---
