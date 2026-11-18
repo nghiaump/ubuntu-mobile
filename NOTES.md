@@ -565,3 +565,29 @@ Vấn đề mở: (1) `systemctl reboot` treo (dùng `reboot -ff` tạm), (2) ch
   power-log, Wi-Fi, Tailscale, 4 container server game healthy ("Up 56 years" = do RTC 1970 trước NTP, chỉ hiển thị), loa mặc định, DING, extension v3, slot b Successful.
 - 🔴 Bluetooth không lên: race — pixel-bt-addr chạy 5.5 s khi hci0 có trong sysfs nhưng QCA setup xong 6.3 s → mgmt chưa liệt kê → "bỏ qua".
   Sửa: lặp tới khi Unconfigured (gán) hoặc có trong btmgmt info (bỏ qua), tối đa 60 s. Tái hiện race bằng rmmod/modprobe + restart ngay → OK, Powered yes.
+
+### 2026-11-15 — gửi file Bluetooth "not sent"
+- Ghép đôi với Legion Tab Y700 OK nhưng gửi file báo "not sent". bluez-obexd có nhưng obexd không chạy (D-Bus activation), GNOME 46 không có
+  agent nhận file. Viết `pixel-obex-agent` (user service, chỉ nhận từ thiết bị đã ghép đôi, lưu ~/Downloads/Bluetooth, notify) + drop-in
+  obex.service `-r Downloads/Bluetooth`. Agent đăng ký OK nhưng bluetoothd: "RFCOMM server failed for Object Push: socket(STREAM, RFCOMM):
+  Protocol not supported" → **kernel thiếu CONFIG_BT_RFCOMM** (cũng thiếu BT_BNEP, BT_LE). Thêm vào pixel3.config (+ need_m).
+  Kế hoạch: build lại (đổi config → ~25–35 phút), thay nóng toàn bộ module Bluetooth (BT toàn module, lõi kernel không đổi) — không flash.
+  SSD workspace chưa cắm → chờ.
+- OSK thiếu Esc trong terminal: layout terminal = `us-extended` (Tab/Ctrl/Alt/mũi tên, KHÔNG Esc). Script 97 sinh bản thay phím emoji→Esc vào
+  ~/.local/share/pixel-osk-layouts + environment.d G_RESOURCE_OVERLAYS=/org/gnome/shell/osk-layouts=… (cần đăng nhập lại). Tài liệu touch-ui.md.
+- Esc chưa hiện sau đăng nhập lại: gnome-shell không có G_RESOURCE_OVERLAYS vì systemd --user (giữ sống bởi SSH) chưa đọc environment.d → daemon-reload; script 97 tự reload. Cần đăng nhập lại lần nữa.
+- Tối nay làm tiếp: cắm SSD rồi `scripts/00-workspace.sh` báo "hdiutil: attach failed - no mountable file systems" (chưa điều tra: /Volumes/LIB có mount
+  chưa? sparsebundle còn nguyên?). Sau đó: `scripts/30-kernel.sh build` (RFCOMM/BNEP/LE) → thay nóng module Bluetooth → thử nhận file OBEX.
+
+### 2026-11-18
+- Tư vấn pin server 24/7: inhibit giữ pin đứng yên → STOP quyết định tuổi thọ; START thấp (30 %) chỉ mất dự phòng sau mất điện. Người dùng chọn **60/55**
+  (overlay + máy qua Tailscale). Pin đang 90 % → giữ yên (không tự xả). power-battery.md có bảng chọn.
+- Máy cắm nguồn PD nhưng Mac không thấy USB (UDC not attached, usb0 DOWN) → nhiều khả năng cắm cục sạc/dây chỉ sạc; làm qua Tailscale.
+- SSD mount OK lần này. Build #11 (BT_RFCOMM/BNEP/LE) chạy nền.
+- USB không lên dù tráo cáp: UDC "not attached", dmesg "dwc3 a600000.usb: failed to enable ep0out"; soft_connect/gắn lại UDC không ăn.
+  Rebind driver dwc3-qcom-legacy (a6f8800.usb) → configured high-speed; Mac en6 chỉ 169.254 vì dnsmasq NM "Address already in use" → nmcli con down/up usb0 → OK.
+  IPv6 link-local fe80::ff:fe3a:2%en6 SSH được trong lúc đó. Gói thành /usr/local/sbin/pixel-usb-reset (overlay) + RUNBOOK §4 + storage-usb.md.
+- Build #11 OK (~3 phút; lần đầu lỗi vì Docker Desktop chưa bật). Chép module BT ra scratchpad trước khi tháo SSD (Docker VM giữ ổ → quit Docker).
+- Thay nóng module BT: lần 1 `rmmod bluetooth` thất bại (bnep tự nạp, stop bluetooth bị "canceled") → bluetooth.ko CŨ + rfcomm/bnep/hci_uart MỚI (srcversion lệch).
+  Sửa: mask --runtime bluetooth → stop → modprobe -r toàn bộ → modprobe hci_uart → unmask → bt-addr → bluetooth → obex agent. Tất cả srcversion khớp,
+  Powered yes, UUID OBEX Object Push + File Transfer có. Chờ người dùng gửi thử file. Tài liệu connectivity.md (OBEX + quy trình thay nóng).

@@ -26,6 +26,15 @@
 | QUSB2 tinh chỉnh | `imp-res-offset 8`, `hstx-trim 21.6 mA`, `preemphasis 5 %`, width half-bit |
 | Hệ quả | Chỉ làm **thiết bị** (không cắm được chuột/bàn phím USB). Host/OTG cần dr_mode khác + vai trò Type-C (chưa làm) |
 
+### Lỗi: dwc3 kẹt sau khi rút/cắm cáp (2026-11-18)
+- Triệu chứng: PD vẫn thương lượng (máy vẫn sạc, `usb_type` CDP), nhưng `/sys/class/udc/a600000.usb/state` = `not attached`, Mac không thấy thiết bị;
+  `dmesg`: `dwc3 a600000.usb: failed to enable ep0out`. `soft_connect` disconnect/connect và gắn lại UDC configfs **không** ăn.
+- Sửa: unbind/bind driver của `a6f8800.usb` (**`dwc3-qcom-legacy`**) → UDC `configured` (high-speed). Sau đó Mac chỉ có `169.254.x.x` vì
+  dnsmasq của NetworkManager báo `failed to create listening socket for 172.16.42.1: Address already in use` → `nmcli con down usb0; nmcli con up usb0`.
+- Gói lại: **`/usr/local/sbin/pixel-usb-reset`** (overlay). Chạy qua Tailscale/Wi-Fi. Trong lúc USB IPv4 hỏng, IPv6 link-local `fe80::ff:fe3a:2%enX` vẫn SSH được.
+- Nguyên nhân gốc chưa rõ: driver dwc3-qcom-legacy không có role switch/extcon; từ khi có driver Type-C/PD (patch 0012) TCPM gọi
+  "Requesting mux state…, usb-role 2" nhưng không có role switch nào nhận. Hướng sửa sau: nối `connector` ↔ `usb-role-switch` của dwc3 trong DT.
+
 ### Gadget (configfs, `usb-gadget.sh`)
 | Mục | Giá trị |
 |---|---|

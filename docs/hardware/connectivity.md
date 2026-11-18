@@ -46,6 +46,26 @@ pwrseq-qcom-wcn (WCN3990 PMU) ── ath10k_snoc ── chờ dịch vụ QMI "W
 - Kiểm chứng: `rmmod hci_uart && modprobe hci_uart` (controller về unconfigured) → `systemctl restart pixel-bt-addr` → "Set Public Address complete" → `Powered: yes`.
 - Lựa chọn khác (chưa làm): đặt `local-bd-address` trong DT (cần build/flash DTB).
 
+### Gửi/nhận file (OBEX) — 2026-11-15/18
+- Triệu chứng: ghép đôi OK nhưng gửi file báo **"not sent"**. Hai nguyên nhân chồng nhau:
+  1. **Kernel thiếu `CONFIG_BT_RFCOMM`** (OBEX chạy trên RFCOMM): bluetoothd log `RFCOMM server failed for Object Push: socket(STREAM, RFCOMM): Protocol not supported`.
+     Cũng thiếu `BT_BNEP` (PAN) và `BT_LE` (BLE). Đã thêm vào `kernel/pixel3.config` (+ `need_m` trong `30-kernel.sh`); build #11.
+  2. **GNOME 46 không có thành phần nhận file**: `obexd` (bluez-obexd) chỉ chạy khi được gọi, không có agent chấp nhận "push".
+     → **`pixel-obex-agent`** (user service, `/usr/local/bin/`): đăng ký `org.bluez.obex.AgentManager1` (kích hoạt obexd), **chỉ nhận từ thiết bị đã ghép đôi**,
+     lưu `~/Downloads/Bluetooth` (drop-in `obex.service` `-r Downloads/Bluetooth`), thông báo GNOME khi xong. Bật: `systemctl --global enable pixel-obex-agent`.
+- Kiểm: `bluetoothctl show | grep "Object Push"` → `UUID: OBEX Object Push (00001105-…)`; log agent: `journalctl --user -u pixel-obex-agent`.
+
+### Thay nóng module Bluetooth (không flash, không reboot)
+Toàn bộ Bluetooth là module, lõi kernel không đổi khi chỉ đổi option `BT_*` → build module mới rồi thay trên máy:
+1. Chép `net/bluetooth`, `drivers/bluetooth` từ `out/kernel/modules/lib/modules/<krel>/kernel/` vào `/lib/modules/<krel>/kernel/`, `depmod -a`
+   (bản cũ sao lưu `/var/backups/bt-modules-k10/`).
+2. **Bẫy:** `systemctl stop bluetooth` bị huỷ ("Job canceled") vì có thành phần kéo nó chạy lại, bluetoothd giữ socket RFCOMM, và `bnep` tự nạp
+   → `rmmod bluetooth` thất bại → **bluetooth.ko CŨ chạy cùng rfcomm/bnep/hci_uart MỚI** (lệch cấu trúc vì khác `BT_LE`, nguy cơ lỗi bộ nhớ).
+3. Đúng: `systemctl mask --runtime bluetooth` → `stop` → `modprobe -r rfcomm bnep hidp hci_uart; modprobe -r btqca btbcm; modprobe -r bluetooth`
+   → `modprobe hci_uart` → `unmask --runtime` → `systemctl restart pixel-bt-addr` → `start bluetooth` → `systemctl --user start obex pixel-obex-agent`.
+4. Kiểm đồng bộ: `cat /sys/module/<m>/srcversion` phải bằng `modinfo -F srcversion <m>` cho bluetooth, rfcomm, bnep, hci_uart.
+- Trạng thái 2026-11-18: module Bluetooth = build #11, Image ở boot_b vẫn #10 (lõi giống nhau). Lần flash kernel sau dùng build ≥ #11.
+
 ## Modem & DSP (remoteproc)
 | Lõi | Node | Driver | Firmware (`qcom/sdm845/Google/blueline/`) | Vùng nhớ |
 |---|---|---|---|---|

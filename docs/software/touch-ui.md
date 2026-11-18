@@ -42,6 +42,16 @@ Cập nhật: 2026-11-15. Liên quan: [`rootfs-services.md`](rootfs-services.md)
 4. Sửa phía GNOME: extension `pixel3xl-shell` nghe `Main.inputMethod` `cursor-location-changed`; nếu có focus của client
    (`Main.inputMethod.currentFocus`) và OSK đang ẩn → `Main.keyboard.open()`. Chạm lại vào ô (con trỏ đổi vị trí) cũng mở lại OSK.
 
+### Phím Esc trong terminal (2026-11-15)
+- GNOME chọn layout `<layout>-extended` khi app báo `content purpose = TERMINAL` (`keyboard.js _updateLayout`). `us-extended`
+  (trong `/usr/share/gnome-shell/gnome-shell-osk-layouts.gresource`) có Tab/Ctrl/Alt/mũi tên nhưng **không có Esc** ở trang nào.
+- Sửa không đụng file gói: script 97 trích `us-extended.json`, thay phím `emoji` (trang default/shift) bằng `{"label":"Esc","keyval":"0xff1b"}`,
+  lưu `~/.local/share/pixel-osk-layouts/`, và đặt `~/.config/environment.d/90-pixel-osk.conf`:
+  `G_RESOURCE_OVERLAYS=/org/gnome/shell/osk-layouts=<thư mục đó>` (GLib đọc file overlay trước resource). **Cần đăng nhập lại.**
+- Bẫy: `environment.d` chỉ được `systemd --user` đọc khi khởi động/`daemon-reload`; trình này **không dừng khi đăng xuất GNOME** (phiên SSH giữ nó)
+  → lần đầu đăng nhập lại vẫn chưa có biến. Script 97 giờ chạy `systemctl --user daemon-reload`. Kiểm: `tr '\0' '\n' < /proc/$(pgrep -x gnome-shell)/environ | grep G_RESOURCE`.
+- Layout tạo lại từ bản của gói mỗi lần chạy script 97 → cập nhật GNOME thì chạy lại 97. Gỡ: `scripts/97-chrome-osk.sh <host> undo`.
+
 ### Lỗi đã biết
 - `JS ERROR: Argument descendant may not be null` ở `keyboard.js:1165 maybeHandleEvent` khi có hộp thoại modal (polkit…): bug GNOME 46, vô hại.
 

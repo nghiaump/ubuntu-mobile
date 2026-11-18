@@ -79,7 +79,18 @@ Cấu hình sạc gốc của Google (`google,charger`, stock dtbo — Android, 
 Sàn ~130 mA là phần cứng (panel vẫn quét ở độ sáng 0, MDSS/DSI, modem cho Wi-Fi). Muốn giảm mạnh cần suspend → cần sửa tắt/bật panel (RUNBOOK §6.3).
 Đo: `current_now` của `max1720x` (µA, âm = xả), lấy trung bình ≥ 60 s; lần đo 40 s đầu tiên cho số vô lý (5 mA) — luôn đo lặp B→C→B.
 
-## Giới hạn sạc (2026-11-14) ✅ — đang dùng **STOP=90 / START=85** (từ 2026-11-15, theo yêu cầu: thêm dự phòng mất điện cho server)
+## Giới hạn sạc (2026-11-14) ✅ — đang dùng **STOP=60 / START=55** (từ 2026-11-18; trước đó 90/85)
+**Khuyến nghị cho server cắm sạc 24/7 (tải nhẹ):** khi cắm, `inhibit-charge` giữ pin **đứng yên** (0 mA, USB cấp điện) → tuổi thọ phụ thuộc
+chủ yếu vào **mức pin nằm chờ (STOP)** và nhiệt độ; START chỉ có tác dụng sau khi mất điện (đặt quá thấp, vd. 30 %, chỉ làm mất dự phòng cho lần mất
+điện sau, không lợi gì cho pin; cố tình xả vòng 80→30 thì tạo thêm chu kỳ = hại). Bảng chọn:
+| Mục tiêu | STOP/START | Điện áp nghỉ ≈ | Dự phòng mất điện (~165 mA) |
+|---|---|---|---|
+| Bền nhất (đang dùng) | 60/55 | ~3.95 V | ~11 h |
+| Cân bằng | 80/75 | ~4.16 V | ~15 h |
+| Nhiều dự phòng | 90/85 | ~4.27–4.30 V | ~17 h |
+- Pin cao hơn STOP lúc đổi cấu hình **không tự xả** (inhibit chỉ dừng nạp): cần rút sạc vài giờ, hoặc thêm tuỳ chọn "tự xả về STOP" (chưa làm).
+- Với STOP=60, Defender (ngưỡng 80 %) không còn kích hoạt — mức 60 % đã an toàn với nhiệt.
+
 - Mặc định trong script nếu thiếu file cấu hình: 80/75. 80 % ≈ 4.16 V; 90 % ≈ 4.27–4.30 V lúc nghỉ (pin tối đa 4.4 V).
 - Lưu ý: Battery Defender của Google (bảng trên) coi ≥ 4.27 V + ≥ 35 °C kéo dài 6 h là có hại → nếu pin hay nóng ≥ 35 °C, quay về 80/75.
 - Dự phòng khi mất điện (tải server ~165 mA, màn tắt): từ 80 % ≈ 15 h, từ 90 % ≈ 17 h (charge_full 3135 mAh, 2026-11-15).

@@ -146,6 +146,7 @@ chỉ khi thật cần, hỏi người dùng). **Không bao giờ `fastboot flas
 ### Mạng / dịch vụ
 | Triệu chứng | Nguyên nhân | Xử lý |
 |---|---|---|
+| Cắm cáp vào Mac nhưng **Mac không thấy điện thoại** (PD vẫn sạc; UDC `not attached`, dmesg `dwc3 a600000.usb: failed to enable ep0out`; sau khi sửa Mac chỉ có `169.254.x.x`) | dwc3-qcom kẹt sau khi rút/cắm cáp (gốc chưa rõ, nghi thiếu role switch cho dwc3 từ khi có driver Type-C/PD) + dnsmasq NM "Address already in use" | **`sudo pixel-usb-reset`** qua Tailscale/Wi-Fi (rebind `dwc3-qcom-legacy`, dựng lại gadget, `nmcli con down/up usb0`); SSH dự phòng IPv6 `fe80::ff:fe3a:2%enX`. Chi tiết: `hardware/storage-usb.md` |
 | **Cắm điện thoại → Mac mất Internet** | NM `method=shared` cấp gateway + DNS qua DHCP | `dnsmasq-shared.d/10-usb0-no-gateway.conf` + `never-default`. Sau mọi thay đổi mạng: `route -n get default` trên Mac phải là en0 |
 | usb0 *unmanaged* | `85-nm-unmanaged.rules`: gadget bị bỏ qua; `10-globally-managed-devices.conf`; thiếu iptables | udev rule `86-pixel-usb-gadget-nm.rules`; file trống che conf; cài iptables/nftables |
 | usb-gadget.service hỏng sau switch_root | initramfs chỉ tháo UDC → ghi `*_addr` bị `-EBUSY` | initramfs gỡ hẳn gadget |
