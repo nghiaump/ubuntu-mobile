@@ -95,6 +95,8 @@ in_chroot systemctl enable usb-gadget.service pixel-firstboot.service pixel-sshk
 for s in rmtfs tqftpserv; do
   in_chroot systemctl enable "$s.service" >/dev/null 2>&1 && echo "   enable $s" || echo "   !! không có $s.service"
 done
+# Nhận file Bluetooth (OBEX) trong phiên người dùng: agent chỉ nhận từ thiết bị đã ghép đôi (docs/hardware/connectivity.md)
+in_chroot systemctl --global enable pixel-obex-agent.service >/dev/null 2>&1 || echo "   !! không enable được pixel-obex-agent"
 # qbootctl.service là unit "static" (không có [Install]) -> gắn tay vào multi-user (RUNBOOK §6.5)
 in_chroot ln -sf /lib/systemd/system/qbootctl.service /etc/systemd/system/multi-user.target.wants/qbootctl.service
 # pd-mapper / qrtr-ns: kernel đã có (QCOM_PD_MAPPER, qrtr ns) -> tắt bản userspace để tránh tranh cổng

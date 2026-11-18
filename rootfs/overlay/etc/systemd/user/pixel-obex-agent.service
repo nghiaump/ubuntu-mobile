@@ -1,0 +1,11 @@
+[Unit]
+Description=Pixel 3 XL: nhận file Bluetooth (OBEX) từ thiết bị đã ghép đôi
+After=dbus.socket
+
+[Service]
+ExecStart=/usr/local/bin/pixel-obex-agent
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

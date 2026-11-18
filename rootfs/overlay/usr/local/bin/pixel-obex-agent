@@ -1,0 +1,129 @@
+#!/usr/bin/python3
+"""Nhận file qua Bluetooth (OBEX Object Push) trên GNOME 46 — tài liệu: docs/hardware/connectivity.md
+
+GNOME 46 không có thành phần nhận file Bluetooth: obexd (bluez-obexd) chỉ chạy khi được gọi và không có agent nào
+chấp nhận "push" -> thiết bị khác báo "not sent". Agent này (chạy trong phiên người dùng):
+  - đăng ký với org.bluez.obex.AgentManager1 (việc này cũng khởi động obexd -> dịch vụ OPP được công bố);
+  - CHỈ chấp nhận file từ thiết bị ĐÃ GHÉP ĐÔI (org.bluez Device1.Paired), thiết bị lạ bị từ chối;
+  - lưu vào thư mục gốc của obexd (~/Downloads/Bluetooth, xem drop-in obex.service), tên trùng thì thêm số;
+  - hiện thông báo GNOME khi nhận xong / lỗi.
+"""
+import os
+
+import dbus
+import dbus.mainloop.glib
+import dbus.service
+from gi.repository import GLib
+
+OBEX = "org.bluez.obex"
+AGENT_PATH = "/org/pixel3xl/obex_agent"
+ROOT = os.path.expanduser("~/Downloads/Bluetooth")
+
+
+class Rejected(dbus.DBusException):
+    _dbus_error_name = "org.bluez.obex.Error.Rejected"
+
+
+def notify(summary, body=""):
+    try:
+        os.spawnlp(os.P_NOWAIT, "notify-send", "notify-send", "-a", "Bluetooth", "-i", "bluetooth", summary, body)
+    except OSError:
+        pass
+
+
+def props(bus, service, path, iface):
+    return dbus.Interface(bus.get_object(service, path), "org.freedesktop.DBus.Properties").GetAll(iface)
+
+
+def is_paired(address):
+    sysbus = dbus.SystemBus()
+    om = dbus.Interface(sysbus.get_object("org.bluez", "/"), "org.freedesktop.DBus.ObjectManager")
+    for ifaces in om.GetManagedObjects().values():
+        dev = ifaces.get("org.bluez.Device1")
+        if dev and str(dev.get("Address", "")).upper() == address.upper():
+            return bool(dev.get("Paired", False)), str(dev.get("Alias", address))
+    return False, address
+
+
+def unique_name(name):
+    name = os.path.basename(name) or "file"
+    base, ext = os.path.splitext(name)
+    candidate, n = name, 1
+    while os.path.exists(os.path.join(ROOT, candidate)):
+        candidate = f"{base} ({n}){ext}"
+        n += 1
+    return candidate
+
+
+class Agent(dbus.service.Object):
+    def __init__(self, bus):
+        super().__init__(bus, AGENT_PATH)
+        self.bus = bus
+        self.pending = {}
+
+    @dbus.service.method("org.bluez.obex.Agent1", in_signature="o", out_signature="s")
+    def AuthorizePush(self, transfer):
+        t = props(self.bus, OBEX, transfer, "org.bluez.obex.Transfer1")
+        s = props(self.bus, OBEX, t["Session"], "org.bluez.obex.Session1")
+        address = str(s.get("Destination", ""))
+        paired, alias = is_paired(address)
+        if not paired:
+            print(f"từ chối file từ thiết bị chưa ghép đôi {alias}", flush=True)
+            notify("Đã từ chối file Bluetooth", f"{alias} chưa được ghép đôi")
+            raise Rejected("device not paired")
+        os.makedirs(ROOT, exist_ok=True)
+        name = unique_name(str(t.get("Name", "file")))
+        self.pending[str(transfer)] = (name, alias)
+        print(f"nhận '{name}' từ {alias} ({int(t.get('Size', 0))} byte)", flush=True)
+        return name   # tương đối với thư mục gốc của obexd
+
+    @dbus.service.method("org.bluez.obex.Agent1", in_signature="", out_signature="")
+    def Cancel(self):
+        print("obexd huỷ yêu cầu", flush=True)
+
+    @dbus.service.method("org.bluez.obex.Agent1", in_signature="", out_signature="")
+    def Release(self):
+        print("obexd gỡ agent", flush=True)
+
+    def on_props(self, iface, changed, _invalidated, path=None):
+        if iface != "org.bluez.obex.Transfer1" or path not in self.pending or "Status" not in changed:
+            return
+        status = str(changed["Status"])
+        name, alias = self.pending[path]
+        if status == "complete":
+            print(f"đã nhận xong '{name}'", flush=True)
+            notify("Đã nhận file Bluetooth", f"{name} từ {alias}\n→ {ROOT}")
+            del self.pending[path]
+        elif status == "error":
+            print(f"lỗi khi nhận '{name}'", flush=True)
+            notify("Nhận file Bluetooth thất bại", f"{name} từ {alias}")
+            del self.pending[path]
+
+
+def register(bus, agent):
+    try:
+        mgr = dbus.Interface(bus.get_object(OBEX, "/org/bluez/obex"), "org.bluez.obex.AgentManager1")
+        mgr.RegisterAgent(AGENT_PATH)
+        print(f"đã đăng ký agent OBEX, lưu file vào {ROOT}", flush=True)
+    except dbus.DBusException as e:
+        if e.get_dbus_name() == "org.bluez.obex.Error.AlreadyExists":
+            return False
+        print(f"chưa đăng ký được agent ({e.get_dbus_name()}), thử lại sau 5 s", flush=True)
+        GLib.timeout_add_seconds(5, lambda: register(bus, agent) and False)
+    return False
+
+
+def main():
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    agent = Agent(bus)
+    bus.add_signal_receiver(agent.on_props, dbus_interface="org.freedesktop.DBus.Properties",
+                            signal_name="PropertiesChanged", bus_name=OBEX, path_keyword="path")
+    # Gọi RegisterAgent cũng KÍCH HOẠT obexd qua D-Bus (nó chỉ chạy khi được gọi) -> dịch vụ OPP được công bố.
+    # Theo dõi chủ sở hữu tên: obexd khởi động lại (hoặc chưa chạy, owner rỗng) -> đăng ký lại.
+    bus.watch_name_owner(OBEX, lambda owner: register(bus, agent))
+    GLib.MainLoop().run()
+
+
+if __name__ == "__main__":
+    main()
