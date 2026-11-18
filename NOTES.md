@@ -598,3 +598,5 @@ Vấn đề mở: (1) `systemctl reboot` treo (dùng `reboot -ff` tạm), (2) ch
   xả ~360 mA, SSH USB vẫn OK.
 - Lỗi phụ: journal lúc boot "cannot create /sys/class/power_supply/pmi8998-charger/status: Directory nonexistent" (dịch vụ chạy trước qcom_smbx) →
   chờ tối đa 120 s. Tài liệu power-battery.md (mục DRAIN), RUNBOOK trạng thái.
+- Khởi động lại kiểm chứng (dừng docker trước, `reboot -ff`): slot _b Successful, system running, dịch vụ sạc tự xả lại ở 36 s (87→60 %),
+  4 container healthy, Wi-Fi/usb0/Tailscale/BT Powered OK. Lỗi journal chỉ là lỗi đã biết (camera gpio15, wcd934x, coresight, aux_bridge).

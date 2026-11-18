@@ -111,6 +111,8 @@ chủ yếu vào **mức pin nằm chờ (STOP)** và nhiệt độ; START chỉ
 - An toàn: chỉ ngắt khi pin > trần; cấp lại khi ≤ trần; dịch vụ khởi động/dừng luôn ghi `Charging`. Mạng USB (gadget) vẫn chạy khi ngắt nguồn vào.
 - Kiểm chứng 2026-11-19: "TỰ XẢ: ngắt nguồn USB vào, xả từ 89% về 60%", pin xả ~360 mA (server game chạy), `online=0`, SSH USB vẫn OK.
   89→60 % ≈ 1000 mAh ≈ 2.5–3 h.
+- Kiểm chứng qua khởi động lại (2026-11-19): dịch vụ lên ở 4.3 s, không còn lỗi `Directory nonexistent`; tick đầu (6 s) USB chưa online →
+  tick sau (36 s) "TỰ XẢ: … 87% về 60%" — tự tiếp tục xả sau reboot (trạng thái /run mất nhưng tính lại từ % pin).
 - Lỗi phụ đã sửa cùng lúc: lúc boot dịch vụ chạy trước khi module `qcom_smbx` tạo `pmi8998-charger` → `cannot create …/status: Directory nonexistent`
   (lệnh cấp lại nguồn lúc khởi động bị mất). Nay chờ tối đa 120 s cho `…/status` xuất hiện.
 
