@@ -2,8 +2,8 @@
 # Tài liệu: docs/hardware/power-battery.md
 # Giới hạn sạc: ENABLE=0 để sạc đầy 100%
 ENABLE=1
-STOP=90
-START=85
+STOP=60
+START=55
 # Sạc nhanh theo bảng Google (cần kernel có patch 0009): FAST=0 để giữ 1 A
 FAST=1
 FAST_MAX_MA=3000
