@@ -1,0 +1,18 @@
+#!/bin/sh
+# Cứu hộ mạng USB (NCM) khi Mac không thấy điện thoại dù đã cắm cáp: docs/hardware/storage-usb.md, RUNBOOK §4.
+# Triệu chứng (2026-11-18, sau khi rút/cắm cáp nhiều lần): /sys/class/udc/a600000.usb/state = "not attached",
+# dmesg "dwc3 a600000.usb: failed to enable ep0out"; soft_connect / gắn lại UDC không ăn.
+# Sửa: (1) unbind/bind driver dwc3-qcom(-legacy) của a6f8800.usb, (2) dựng lại gadget (usb-gadget.service),
+# (3) bật lại kết nối NetworkManager "usb0" (dnsmasq cũ báo "Address already in use" -> Mac chỉ có 169.254.x.x).
+# Chạy qua Tailscale/Wi-Fi (USB đang chết): sudo pixel-usb-reset
+set -u
+DEV=a6f8800.usb
+DRV=$(readlink -f /sys/bus/platform/devices/$DEV/driver 2>/dev/null)
+echo "UDC trước: $(cat /sys/class/udc/*/state 2>/dev/null)"
+if [ -n "$DRV" ]; then
+  echo $DEV > "$DRV/unbind"; sleep 2; echo $DEV > "$DRV/bind"; sleep 3
+fi
+systemctl restart usb-gadget.service; sleep 3
+nmcli con down usb0 >/dev/null 2>&1; sleep 1; nmcli con up usb0 >/dev/null 2>&1; sleep 3
+echo "UDC sau: $(cat /sys/class/udc/*/state 2>/dev/null) ($(cat /sys/class/udc/*/current_speed 2>/dev/null))"
+ip -br addr show usb0
