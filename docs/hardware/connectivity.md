@@ -84,3 +84,23 @@ Toàn bộ Bluetooth là module, lõi kernel không đổi khi chỉ đổi opti
 ## NFC — NXP PN557 (chưa thử)
 `&i2c3` `nfc@28`, `nxp,pn557`/`nxp,nxp-nci-i2c`, IRQ GPIO 63, enable GPIO 25, firmware GPIO 79 (+ eSE power GPIO 23 trong stock).
 Driver `drivers/nfc/nxp-nci/i2c.c` (`CONFIG_NFC_NXP_NCI_I2C=m`).
+
+### "Connection failed — Activation of network connection failed" khi bấm Bluetooth (2026-11-19)
+- Không phải lỗi Bluetooth: Quick Settings GNOME 46 có **hai** nút — "Bluetooth" (bật/tắt radio) và **"Bluetooth Tethers"/"Tether"**
+  (`NMBluetoothToggle` trong `ui/status/network.js`, hiện khi NetworkManager thấy thiết bị đã ghép đôi có NAP, vd. Legion Tab Y700).
+  Bấm nút Tether = gnome-shell gọi NM kích hoạt `Legion Tab Y700 Network` (Bluetooth PAN, dùng Internet của máy kia).
+- Log: NM `audit: op="connection-activate" name="Legion Tab Y700 Network" pid=<gnome-shell>`; bluetoothd `connect to …: Host is down (112)`
+  (máy kia tắt/ngoài tầm) hoặc `bnep0 connected` rồi `bnep0 disconnected` ngay (máy kia **chưa bật "Chia sẻ Internet qua Bluetooth"**).
+- Bluetooth vẫn bình thường (`bluetoothctl show` → Powered: yes). Muốn dùng Internet qua máy kia: bật Bluetooth tethering trên máy đó rồi mới bấm Tether.
+- Nhận file qua Bluetooth KHÔNG cần nút này (chỉ cần ghép đôi + OBEX agent, mục trên).
+- **Đã ẩn nút Tether** (2026-11-19): `/etc/NetworkManager/conf.d/98-pixel-no-bt-tether.conf` (`[device-…] match-device=type:bt managed=0`).
+  `nmcli general reload conf` KHÔNG áp dụng cho thiết bị BT đã có → chỉ có hiệu lực khi NM tạo lại thiết bị (restart bluetooth.service hoặc reboot).
+  Kiểm chứng: sau restart bluetooth, `nmcli dev` → `0C:7D:… unmanaged`. Muốn dùng lại tethering: xoá file + restart bluetooth.
+
+### Nhận file OBEX — kiểm chứng (2026-11-19)
+- ✅ Legion Tab Y700 → Pixel: `logo_512.png` 19729 byte vào `~/Downloads/Bluetooth` (agent log: "nhận … từ Legion Tab Y700" → "đã nhận xong").
+- ⚠️ Chưa rõ nguyên nhân các lần "not sent" trước đó trong cùng lần boot: không có log nào ở agent/obexd/bluetoothd (không có yêu cầu nào tới).
+  Thành công ngay sau khi `bluetooth.service` được khởi động lại (01:20). Giả thuyết CHƯA kiểm chứng: (1) race lúc boot — obexd (user, 9.5 s)
+  chạy trước bluetoothd (16.4 s); (2) phía Tab (lúc đó NAP còn báo `Host is down`). Lần sau nếu lại "not sent" ngay sau reboot:
+  `sudo btmon` trong lúc gửi; `bluetoothctl show | grep OBEX`; thử `systemctl --user restart obex pixel-obex-agent` (không đụng bluetoothd) để phân biệt.
+

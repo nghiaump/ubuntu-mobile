@@ -600,3 +600,9 @@ Vấn đề mở: (1) `systemctl reboot` treo (dùng `reboot -ff` tạm), (2) ch
   chờ tối đa 120 s. Tài liệu power-battery.md (mục DRAIN), RUNBOOK trạng thái.
 - Khởi động lại kiểm chứng (dừng docker trước, `reboot -ff`): slot _b Successful, system running, dịch vụ sạc tự xả lại ở 36 s (87→60 %),
   4 container healthy, Wi-Fi/usb0/Tailscale/BT Powered OK. Lỗi journal chỉ là lỗi đã biết (camera gpio15, wcd934x, coresight, aux_bridge).
+- Người dùng báo "Connection failed / Activation of network connection failed" khi bật Bluetooth: thực ra bấm nút **Bluetooth Tether** (NM PAN tới
+  Legion Tab, có từ khi kernel có BT_BNEP) — tab chưa bật chia sẻ Internet → Host is down / bnep0 rớt ngay. BT vẫn Powered yes. Ghi connectivity.md.
+- Tether: thêm 98-pixel-no-bt-tether.conf (NM unmanaged type:bt); có hiệu lực sau khi bluetooth.service restart lúc 01:20 → `unmanaged`, nút ẩn.
+- ✅ OBEX nhận file thành công từ Legion Tab (logo_512.png → ~/Downloads/Bluetooth). Các lần "not sent" trước (cùng boot, trước restart bluetoothd)
+  không để lại log nào → nguyên nhân chưa rõ (giả thuyết race obexd/bluetoothd lúc boot, hoặc phía Tab). Ghi cách chẩn đoán ở connectivity.md.
+
