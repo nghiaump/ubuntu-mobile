@@ -56,6 +56,10 @@ sudo install -d /etc/dconf/db/local.d/locks
 printf "/org/gnome/desktop/session/idle-delay\n/org/gnome/settings-daemon/plugins/power/sleep-inactive-ac-type\n/org/gnome/settings-daemon/plugins/power/sleep-inactive-battery-type\n/org/gnome/settings-daemon/plugins/power/idle-dim\n/org/gnome/settings-daemon/plugins/power/power-button-action\n/org/gnome/desktop/screensaver/lock-enabled\n/org/gnome/desktop/screensaver/ubuntu-lock-on-suspend\n/org/gnome/desktop/lockdown/disable-lock-screen\n" | sudo tee /etc/dconf/db/local.d/locks/90-pixel-no-blank >/dev/null
 # Pin cạn: UPower mặc định HybridSleep -> ngủ = tắt panel = treo/reset. Tắt máy thay vì ngủ (RUNBOOK §6).
 sudo sed -i 's/^CriticalPowerAction=.*/CriticalPowerAction=PowerOff/' /etc/UPower/UPower.conf
+# Tắt máy ở 15 % (mặc định 2 %): giữ pin không cạn sâu khi mất nguồn USB lúc vắng người (sự cố 2026-11-19, power-battery.md).
+# Phải giữ Low > Critical > Action. Cắm sạc lại -> máy tự boot vào Ubuntu.
+sudo sed -i -e 's/^PercentageLow=.*/PercentageLow=20/' -e 's/^PercentageCritical=.*/PercentageCritical=17/' \
+  -e 's/^PercentageAction=.*/PercentageAction=15/' /etc/UPower/UPower.conf
 # fwupd (kéo theo bởi ubuntu-desktop) dò phân vùng EFI qua udisks -> từng mount modem_b. Vô dụng trên máy này: mask.
 sudo systemctl disable --now fwupd-refresh.timer fwupd.service >/dev/null 2>&1 || true
 sudo systemctl mask fwupd.service fwupd-refresh.service fwupd-refresh.timer >/dev/null
