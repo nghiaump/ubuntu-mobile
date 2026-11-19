@@ -606,3 +606,10 @@ Vấn đề mở: (1) `systemctl reboot` treo (dùng `reboot -ff` tạm), (2) ch
 - ✅ OBEX nhận file thành công từ Legion Tab (logo_512.png → ~/Downloads/Bluetooth). Các lần "not sent" trước (cùng boot, trước restart bluetoothd)
   không để lại log nào → nguyên nhân chưa rõ (giả thuyết race obexd/bluetoothd lúc boot, hoặc phía Tab). Ghi cách chẩn đoán ở connectivity.md.
 
+### 2026-11-19 tối — kiểm tra sạc/nhiệt: máy cạn pin tắt 2 lần trong ngày
+- Boot: 01:07 (reboot thử), 07:16 (sau khi cạn pin), 16:38 (UPower PowerOff 16:10 ở ~3 %). TCPM: VBUS off + CC→0 lúc 01:25 (DRAIN đang ngắt nguồn vào),
+  07:49, 10:24 (inhibit ~2 h), 18:15 (inhibit ~30 phút); 22:15 cắm lại. Chi tiết power-battery.md "Sự cố 2026-11-19". Chờ người dùng: loại nguồn, có rút cáp không.
+- Nhiệt: nghỉ/inhibit 28–33 °C; sạc nhanh PD 2 A 38–46 °C (46 °C lúc 16:51, vừa boot + Docker khởi động, CPU 94 °C); CPU 85–94 °C lúc tải ~3 (01:30–02:30, 12:35).
+- Người dùng: cốc sạc tường PD (không phải sạc dự phòng) → giả thuyết chuyển sang khối Type-C/patch 0012. Người dùng chọn chỉ theo dõi thêm (chưa sửa DRAIN/tự cứu).
+- UPower: tắt máy ở 10 % (PercentageAction=10, Critical=12, Low=20) — áp dụng trên máy + scripts/91-xrdp.sh. Lúc 16:10 UPower tắt máy ở ~2 % (logind "power off now").
+- Nâng ngưỡng tắt máy UPower lên **15 %** (Critical=17, Low=20) theo yêu cầu người dùng (vắng nhà lâu).

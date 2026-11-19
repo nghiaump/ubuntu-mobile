@@ -116,6 +116,28 @@ chủ yếu vào **mức pin nằm chờ (STOP)** và nhiệt độ; START chỉ
 - Lỗi phụ đã sửa cùng lúc: lúc boot dịch vụ chạy trước khi module `qcom_smbx` tạo `pmi8998-charger` → `cannot create …/status: Directory nonexistent`
   (lệnh cấp lại nguồn lúc khởi động bị mất). Nay chờ tối đa 120 s cho `…/status` xuất hiện.
 
+## ⚠️ Sự cố 2026-11-19: mất nguồn USB khi pin đang được giữ → máy cạn pin, tắt 2 lần
+Nguồn: `/var/log/pixel-power.csv` (usb_online, typec_mode) + `/var/log/pixel-tcpm.log`.
+| Giờ | Trạng thái lúc đó | TCPM | Hậu quả |
+|---|---|---|---|
+| 01:25 | **DRAIN đang ngắt nguồn vào** (từ ~01:08, sạc PD 9 V) | `VBUS off`, CC1 5→0 (nguồn **rút cả Rp**) → SNK_UNATTACHED, không gắn lại | 02:23 "cấp lại nguồn USB" vô tác dụng (VBUS đã mất) → xả 60→0 %, boot lại 07:16 khi cắm |
+| 07:49 | đang sạc, sau đó gắn lại ở chế độ `default` (không PD) | VBUS off, CC1 3→0 | có thể người dùng đổi nguồn — chưa xác nhận |
+| 10:24 | inhibit ở 60 % ~2 h, nguồn `default` | VBUS off, CC1 3→0 | xả 59→3 %, UPower tắt máy 16:10, boot lại 16:38 khi cắm PD |
+| 18:15 | inhibit ở 60 % ~30 phút, PD | VBUS off, CC1 5→0 | xả 60→25 %, 22:15 cắm lại (CC2 = cắm lại vật lý) |
+- Mẫu chung: nguồn **tắt hẳn cổng** (mất cả VBUS lẫn Rp trên CC) khi máy **gần như không kéo dòng** (ngắt nguồn vào hoặc chỉ nuôi hệ thống ~1–2 W
+  lúc inhibit) và không tự bật lại tới khi cắm lại. Phía máy không làm gì được khi Rp đã mất.
+- Người dùng xác nhận: **cốc sạc tường PD** (không phải sạc dự phòng), Identity/SVID PD `0x413c` → loại giả thuyết "nguồn tự tắt khi tải thấp".
+- Thêm dữ kiện: trước lần mất nguồn 18:15 **không có bản tin PD nào** suốt 1.5 h (không Hard Reset từ nguồn); 07:49 xảy ra cả khi đang sạc ~2 A
+  (VBUS về lại sau 3 s, gắn lại không PD). Kernel log không có gì lúc 10:24/18:15.
+- Giả thuyết đang xét (CHƯA kiểm chứng): khối Type-C của PMI8998 / backend `qcom_pmic_typec_port_smb2` (patch 0012) mất trạng thái UFP (Rd) sau
+  một lần VBUS chập → nguồn thấy "không có thiết bị" nên không cấp lại; hoặc tiếp xúc cáp/cổng. Hướng xử lý: tự phục hồi bằng unbind/bind driver
+  `qcom,pmic-typec` khi mất nguồn bất thường + ghi thanh ghi TYPE_C_STATUS_1..5 / USBIN lúc đó để tìm nguyên nhân.
+- Chắc chắn: **DRAIN (và bước xả của Defender) nguy hiểm với nguồn kiểu này** — ngắt nguồn vào ~17 phút là nguồn tự tắt.
+
+- **Biện pháp đã áp dụng (2026-11-19): UPower tắt máy ở 15 %** thay vì 2 % (`/etc/UPower/UPower.conf`: `PercentageLow=20`,
+  `PercentageCritical=17`, `PercentageAction=15`, `CriticalPowerAction=PowerOff`; script 91). Pin không còn bị xả cạn sâu khi mất nguồn lúc vắng người;
+  máy tắt rồi tự boot lại vào Ubuntu khi được cắm sạc (đã thấy lúc 07:16 và 16:38). Từ 60 % về 15 % ≈ 7–8 h ở tải server. 15 % (không phải 10 %) để còn dư khi máy nằm tắt nhiều ngày/tuần (pin vẫn tự hao).
+
 ## USB PD 9 V (2026-11-14) ✅
 - Type-C của PMI8998 nằm trong khối USBIN (0x1300) của SMB2 — mainline không có driver; PD PHY (0x1700) cùng IP PM8150B.
 - Patch 0012 (backend `qcom_pmic_typec_port_smb2.c`) + 0013 (DT `typec@1300`) + 0014 (qcom_smbx không ghi đè ICL khi > 6 V).
